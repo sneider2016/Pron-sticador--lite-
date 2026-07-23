@@ -58,7 +58,6 @@ def motor_analisis_quirurgico(local, visitante, liga):
     """
     semilla = int(hashlib.md5(f"{local.lower()}_{visitante.lower()}_{liga}".encode()).hexdigest(), 16)
     
-    # Universo de combinaciones óptimas (Cuotas filtradas estrictamente entre 1.50 y 2.00)
     matriz_mercados = [
         {
             "principal": "Gana o Empata Local + Over 1.5 Goles", "cuota_p": 1.62, "prob_p": 78,
@@ -71,7 +70,7 @@ def motor_analisis_quirurgico(local, visitante, liga):
             "principal": "Ambos Equipos Anotan (Sí)", "cuota_p": 1.75, "prob_p": 74,
             "secundario": "Over 2.5 Goles Totales", "cuota_s": 1.95, "prob_s": 68,
             "conservador": "Over 1.5 Goles Totales", "cuota_c": 1.33,
-            "funbet": "Ambos Anotan + Over 8.5 Córneres", "cuota_f": 4.80,
+            "funbet": "Ambos Anotan + Over 8.5 Córneres Totales", "cuota_f": 4.80,
             "tactica": "Duelo de estilos vertiginosos. Ambas escuadras promedian más de 14 tiros por partido y tienen defensas con bajas en pelota parada."
         },
         {
@@ -187,12 +186,11 @@ if st.session_state.get('analizado', False):
                 f"**Mercado:** {an['secundario']}\n\n"
                 f"**Cuota Justa:** {an['cuota_s']:.2f} | **Prob. Real:** {an['prob_s']}%")
     
-    # Desglose de Perfiles
+    # Desglose de Perfiles (Optimizado para móvil sin recortes de texto)
     st.markdown("### 📊 Desglose de Escenarios por Perfil")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("🛡️ Conservador", an['conservador'], f"Cuota ~{an['cuota_c']:.2f}")
-    c2.metric("⚖️ Moderado (Principal)", an['principal'], f"Cuota ~{an['cuota_p']:.2f}")
-    c3.metric("🚀 FunBet (Alta Cuota)", an['funbet'], f"Cuota ~{an['cuota_f']:.2f}")
+    st.markdown(f"🛡️ **Conservador:** {an['conservador']} `(Cuota ~{an['cuota_c']:.2f})`")
+    st.markdown(f"⚖️ **Moderado (Principal):** {an['principal']} `(Cuota ~{an['cuota_p']:.2f})`")
+    st.markdown(f"🚀 **FunBet (Alta Cuota):** {an['funbet']} `(Cuota ~{an['cuota_f']:.2f})`")
 
     # DIAGNÓSTICO AUTOMÁTICO DE APIS
     st.write("---")
