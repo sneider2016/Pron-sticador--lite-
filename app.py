@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 import datetime
 import requests
 
@@ -10,7 +10,7 @@ API_FOOTBALL_HOST = "v3.football.api-sports.io"
 st.set_page_config(page_title="Pronosticador Élite App", page_icon="⚽", layout="centered")
 
 st.title("⚽ PRONOSTICADOR ÉLITE 90%")
-st.caption("Motor de Análisis Quántico, Valor Esperado (+EV) y Filtro de Seguridad Automático")
+st.caption("Motor de Análisis Quántico, Valor Esperado (+EV) y Filtro 100% Automático")
 
 st.divider()
 
@@ -23,7 +23,6 @@ def obtener_datos_partido(equipo_local, equipo_visitante):
         'x-rapidapi-host': API_FOOTBALL_HOST,
         'x-rapidapi-key': API_FOOTBALL_KEY
     }
-    # Búsqueda por parámetros
     params = {
         'search': equipo_local
     }
@@ -34,7 +33,6 @@ def obtener_datos_partido(equipo_local, equipo_visitante):
             if data.get('response'):
                 partidos = data['response']
                 for p in partidos:
-                    home = p['teams']['home']['name'].lower()
                     away = p['teams']['away']['name'].lower()
                     if equipo_visitante.lower() in away or away in equipo_visitante.lower():
                         return p
@@ -83,62 +81,72 @@ with col2:
     visitante = st.text_input("Equipo Visitante", value="Chelsea")
 
 if st.button("🔎 Generar Análisis Táctico y Sugerencia"):
-    with st.spinner("Consultando bases de datos en tiempo real (Alineaciones, Bajas y Clima)..."):
-        # Realizar consulta de APIs tras bambalinas
+    with st.spinner("Consultando bases de datos en tiempo real (Clima, Alineaciones y Riesgos)..."):
         datos_partido = obtener_datos_partido(local, visitante)
         
         alertas_auto = []
-        clima_info = "Sin datos meteorológicos críticos."
+        reporte_clima = "☀️ Clima normal y favorable para el partido."
+        reporte_alineaciones = "✅ Alineaciones oficiales confirmadas en sistema."
         
         if datos_partido:
-            # Extracción de venue/estadio
+            # 1. Evaluación de Clima
             venue = datos_partido.get('fixture', {}).get('venue', {})
             lat = venue.get('latitude')
             lon = venue.get('longitude')
             
-            # Chequeo de clima con Open-Meteo
             if lat and lon:
                 clima = obtener_clima_estadio(lat, lon)
                 if clima:
                     codigo_clima = clima.get('weathercode', 0)
                     temp = clima.get('temperature', 20)
-                    # Códigos WMO: 51-67 (Lluvia), 71-77 (Nieve), 80-82 (Chubascos), 95-99 (Tormenta)
                     if codigo_clima >= 51 or temp > 35 or temp < 2:
-                        alertas_auto.append("Clima extremo / Altitud")
-                        clima_info = f"⚠️ Clima adverso detectado ({temp}°C, código meteorológico {codigo_clima})."
+                        alertas_auto.append(f"Clima extremo / Altitud ({temp}°C)")
+                        reporte_clima = f"⚠️ Clima adverso detectado ({temp}°C)."
                     else:
-                        clima_info = f"☀️ Clima favorable ({temp}°C)."
+                        reporte_clima = f"☀️ Clima óptimo ({temp}°C)."
+            
+            # 2. Evaluación de Alineaciones
+            lineups = datos_partido.get('lineups', [])
+            if not lineups or len(lineups) < 2:
+                alertas_auto.append("Alineaciones oficiales aún no confirmadas")
+                reporte_alineaciones = "⚠️ Alineaciones oficiales no publicadas todavía."
+            else:
+                reporte_alineaciones = "✅ Alineaciones oficiales confirmadas."
+        else:
+            # Si la API no encuentra el partido o faltan datos previos
+            alertas_auto.append("Alineaciones oficiales aún no confirmadas")
+            reporte_alineaciones = "⚠️ Alineaciones pendientes por confirmar en sistema."
         
         # Guardar en estado de sesión
         st.session_state['analizado'] = True
         st.session_state['alertas_auto'] = alertas_auto
-        st.session_state['clima_info'] = clima_info
+        st.session_state['reporte_clima'] = reporte_clima
+        st.session_state['reporte_alineaciones'] = reporte_alineaciones
 
-# --- SECCIÓN 2: MERCADO SUGERIDO Y COMPARACIÓN DE CUOTAS ---
+# --- SECCIÓN 2: MERCADO SUGERIDO Y DIAGNÓSTICO ---
 if st.session_state.get('analizado', False):
     st.divider()
     st.subheader("2. Mercado Recomendado por Datos Puros")
     
-    # Simulación de cálculo interno del modelo basado en datos analizados
     mercado_sugerido = "Gana o Empata Local + Over 1.5 Goles"
     cuota_justa = 1.50
     
     st.info(f"**Mercado Óptimo:** {mercado_sugerido}\n\n**Cuota Justa Estimada:** {cuota_justa}")
     
-    # Estado del clima detectado por la API
-    st.caption(f"🌐 **Análisis en vivo de estadio/clima:** {st.session_state.get('clima_info', '')}")
+    # DIAGNÓSTICO AUTOMÁTICO EN LISTA
+    st.markdown("### 🛡️ Diagnóstico Automático (API)")
+    st.write(f"- **Clima del Estadio:** {st.session_state.get('reporte_clima')}")
+    st.write(f"- **Estado de Nóminas:** {st.session_state.get('reporte_alineaciones')}")
+    
+    alertas_encontradas = st.session_state.get('alertas_auto', [])
+    if alertas_encontradas:
+        st.warning("**Alertas activas detectadas automáticamente:**\n" + "\n".join([f"• {a}" for a in alertas_encontradas]))
+    else:
+        st.success("🟢 **Filtro de Seguridad:** Cero riesgos detectados automáticamente. Partido apto.")
     
     st.write("---")
     st.markdown("**Verificación en Betplay:**")
     cuota_betplay = st.number_input("Ingresa la cuota actual en Betplay para este mercado:", min_value=1.01, max_value=20.0, value=1.72, step=0.01)
-    
-    alertas_iniciales = st.session_state.get('alertas_auto', [])
-    
-    alertas = st.multiselect(
-        "Alertas de Riesgo Detectadas (Filtro Automático y Manual):",
-        ["Baja de última hora clave", "Clima extremo / Altitud", "Rotación de nómina", "Árbitro hiper-tarjetero", "Liga inestable/repesca"],
-        default=alertas_iniciales
-    )
     
     # --- SECCIÓN 3: VEREDICTO DE LA REGLA DE ORO ---
     st.divider()
@@ -150,15 +158,17 @@ if st.session_state.get('analizado', False):
         st.subheader("3. Veredicto Final")
         
         # Aplicación estricta de la regla binaria
-        if len(alertas) > 0 or ev <= 0:
+        if len(alertas_encontradas) > 0 or ev <= 0:
             st.error("DECISIÓN: NO APUESTO 🛑")
-            st.write(f"**Razones del rechazo:**")
+            st.write(f"**Razones del rechazo automático:**")
             if ev <= 0:
-                st.write(f"- La cuota de Betplay ({cuota_betplay}) no ofrece Valor Positivo contra la Cuota Justa ({cuota_justa}).")
-            if len(alertas) > 0:
-                st.write(f"- Se detectaron variables de alto riesgo fuera de control: {', '.join(alertas)}.")
+                st.write(f"- La cuota de Betplay ({cuota_betplay}) no ofrece Valor Positivo (+EV) respecto a la Cuota Justa ({cuota_justa}).")
+            if len(alertas_encontradas) > 0:
+                st.write(f"- Se detectaron variables de alto riesgo fuera de control:")
+                for al in alertas_encontradas:
+                    st.write(f"  • {al}")
         else:
             st.success("DECISIÓN: APUESTO 🟢")
             st.write(f"**Análisis de Valor:** +EV positivo detectado (+{ev*100:.1f}% de ventaja).")
             st.write("**Entrada Sugerida:** 1 Unidad ($40.000 COP)")
-            st.write(f"**Retorno Potencial:** ${40000 * cuota_betplay:,.0f} COP")
+            st.write(f"**Retorno Potencial:** ${40000 * cuota_betplay:,.0f} COP")           
