@@ -17,29 +17,29 @@ st.divider()
 
 # --- FUNCIONES DE INTEGRACIÓN Y ANÁLISIS QUIRÚRGICO ---
 
-def obtener_datos_partido(equipo_local, equipo_visitante):
-    """Consulta la API-Football para obtener información real del partido y sus alineaciones."""
+def obtener_datos_partido_por_fecha(equipo_local, equipo_visitante, fecha_str):
+    """Consulta la API-Football buscando directamente por la fecha seleccionada para no perder partidos."""
     url = f"https://{API_FOOTBALL_HOST}/fixtures"
     headers = {
         'x-rapidapi-host': API_FOOTBALL_HOST,
         'x-rapidapi-key': API_FOOTBALL_KEY
     }
-    # Búsqueda más flexible
-    params = {'search': equipo_local.strip()}
+    params = {'date': fecha_str}
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=5)
+        response = requests.get(url, headers=headers, params=params, timeout=6)
         if response.status_code == 200:
             data = response.json()
             if data.get('response'):
                 partidos = data['response']
+                s_loc = equipo_local.lower().strip()
+                s_vis = equipo_visitante.lower().strip()
+                
                 for p in partidos:
-                    away_name = p['teams']['away']['name'].lower()
                     loc_name = p['teams']['home']['name'].lower()
-                    search_vis = equipo_visitante.lower().strip()
-                    search_loc = equipo_local.lower().strip()
+                    vis_name = p['teams']['away']['name'].lower()
                     
-                    if (search_loc in loc_name or loc_name in search_loc) and \
-                       (search_vis in away_name or away_name in search_vis):
+                    # Coincidencia flexible de nombres
+                    if (s_loc in loc_name or loc_name in s_loc) and (s_vis in vis_name or vis_name in s_vis):
                         return p
         return None
     except Exception:
@@ -58,7 +58,7 @@ def obtener_lineups_oficiales(fixture_id):
         if response.status_code == 200:
             data = response.json()
             if data.get('response') and len(data['response']) >= 2:
-                return data['response'] # Trae los 2 equipos con sus 11 titulares
+                return data['response'] # Trae ambos equipos confirmados
         return None
     except Exception:
         return None
@@ -139,22 +139,24 @@ with col1:
         "Otra liga / Torneo personalizado"
     ]
     liga = st.selectbox("Liga / Torneo", lista_ligas)
-    local = st.text_input("Equipo Local", value="Arsenal")
+    local = st.text_input("Equipo Local", value="Qarabag")
 with col2:
     fecha_consulta = st.date_input("Fecha", datetime.date.today())
-    visitante = st.text_input("Equipo Visitante", value="Chelsea")
+    visitante = st.text_input("Equipo Visitante", value="CSKA Sofia")
 
 if st.button("🔎 Generar Análisis Quirúrgico Completo"):
-    with st.spinner("Ejecutando escaneo cuántico de mercados, árbitros, bajas y estilos de juego..."):
-        # 1. API Rastreos
-        datos_partido = obtener_datos_partido(local, visitante)
+    with st.spinner("Ejecutando escaneo cuántico por fecha en API..."):
+        fecha_str = fecha_consulta.strftime("%Y-%m-%d")
+        
+        # 1. API Rastreos por Fecha Exacta
+        datos_partido = obtener_datos_partido_por_fecha(local, visitante, fecha_str)
         
         # 2. Análisis Quirúrgico
         analisis = motor_analisis_quirurgico(local, visitante, liga)
         
         alertas_auto = []
         reporte_clima = "☀️ Clima normal y favorable para el desarrollo táctico."
-        reporte_alineaciones = "✅ Alineaciones y cuerpos técnicos confirmados en API."
+        reporte_alineaciones = "✅ Alineaciones y cuerpos técnicos confirmados."
         
         if datos_partido:
             fixture_id = datos_partido.get('fixture', {}).get('id')
@@ -173,11 +175,11 @@ if st.button("🔎 Generar Análisis Quirúrgico Completo"):
                     else:
                         reporte_clima = f"☀️ Clima óptimo ({temp}°C)."
             
-            # Chequeo de alineaciones directas por ID de partido
+            # Chequeo de alineaciones directas
             if fixture_id:
                 lineups = obtener_lineups_oficiales(fixture_id)
                 if not lineups:
-                    alertas_auto.append("Alineaciones oficiales aún no confirmadas por el club en la base de datos de la API")
+                    alertas_auto.append("Alineaciones oficiales aún no confirmadas en la API")
                     reporte_alineaciones = "⚠️ Nóminas pendientes por confirmación oficial en API."
                 else:
                     reporte_alineaciones = "✅ Alineaciones 100% confirmadas con titulares en API."
@@ -185,7 +187,7 @@ if st.button("🔎 Generar Análisis Quirúrgico Completo"):
                 alertas_auto.append("Alineaciones oficiales aún no confirmadas en API")
                 reporte_alineaciones = "⚠️ Nóminas pendientes por confirmación oficial en API."
         else:
-            alertas_auto.append("Partido no enlazado con API en vivo (Verifica los nombres de los equipos)")
+            alertas_auto.append("Partido no enlazado con API en vivo (Verifica que la fecha sea hoy o revisa los nombres)")
             reporte_alineaciones = "⚠️ No se pudo verificar la nómina automáticamente."
 
         # Guardar en estado
