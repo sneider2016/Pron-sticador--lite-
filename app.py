@@ -14,7 +14,24 @@ st.subheader("1. Configuración del Partido")
 
 col1, col2 = st.columns(2)
 with col1:
-    liga = st.selectbox("Liga / Torneo", ["Premier League", "LaLiga", "Champions League", "Serie A", "Otras"])
+    lista_ligas = [
+        "Premier League (Inglaterra)",
+        "LaLiga (España)",
+        "Serie A (Italia)",
+        "Bundesliga (Alemania)",
+        "Ligue 1 (Francia)",
+        "UEFA Champions League",
+        "UEFA Europa League",
+        "UEFA Conference League",
+        "Copa Libertadores",
+        "Copa Sudamericana",
+        "Liga BetPlay (Colombia)",
+        "Brasileirão (Brasil)",
+        "Liga Profesional (Argentina)",
+        "MLS (Estados Unidos)",
+        "Otra liga / Torneo personalizado"
+    ]
+    liga = st.selectbox("Liga / Torneo", lista_ligas)
     local = st.text_input("Equipo Local", value="Arsenal")
 with col2:
     fecha_consulta = st.date_input("Fecha", datetime.date.today())
