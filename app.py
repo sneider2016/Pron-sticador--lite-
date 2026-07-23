@@ -2,6 +2,8 @@ import streamlit as st
 import datetime
 import requests
 import hashlib
+import unicodedata
+from rapidfuzz import fuzz
 
 # API Keys y Configuración
 API_FOOTBALL_KEY = "3e69e51ac95c094a672f790edac978b0"
@@ -15,10 +17,25 @@ st.caption("Motor Quirúrgico de Análisis Táctico, Valor Esperado (+EV) y Filt
 
 st.divider()
 
-# --- FUNCIONES DE INTEGRACIÓN Y ANÁLISIS QUIRÚRGICO ---
+# --- FUNCIONES DE NORMALIZACIÓN Y BÚSQUEDA UNIVERSAL ---
+
+def normalizar_texto(texto):
+    """Limpia tildes, caracteres especiales y normaliza a minúsculas."""
+    if not texto:
+        return ""
+    texto = unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode("utf-8")
+    texto = texto.lower()
+    # Eliminar muletillas comunes en nombres de clubes para mejorar coincidencia
+    for basura in ["fc", "cd", "club", "sd", "ca", "s.a.", "deportivo", "atletico"]:
+        texto = texto.replace(f" {basura} ", " ").replace(f"{basura} ", "").replace(f" {basura}", "")
+    return texto.strip()
 
 def obtener_datos_partido_por_fecha(equipo_local, equipo_visitante, fecha_str):
-    """Consulta la API-Football buscando directamente por la fecha seleccionada para no perder partidos."""
+    """
+    Buscador Universal Cuántico:
+    Mapea todos los partidos del día y usa Fuzzy Matching para encontrar el partido
+    independientemente de tildes, prefijos o variaciones de nombre de la API.
+    """
     url = f"https://{API_FOOTBALL_HOST}/fixtures"
     headers = {
         'x-rapidapi-host': API_FOOTBALL_HOST,
@@ -26,21 +43,34 @@ def obtener_datos_partido_por_fecha(equipo_local, equipo_visitante, fecha_str):
     }
     params = {'date': fecha_str}
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=6)
+        response = requests.get(url, headers=headers, params=params, timeout=8)
         if response.status_code == 200:
             data = response.json()
             if data.get('response'):
                 partidos = data['response']
-                s_loc = equipo_local.lower().strip()
-                s_vis = equipo_visitante.lower().strip()
+                
+                s_loc = normalizar_texto(equipo_local)
+                s_vis = normalizar_texto(equipo_visitante)
+                
+                mejor_coincidencia = None
+                puntaje_maximo = 0
                 
                 for p in partidos:
-                    loc_name = p['teams']['home']['name'].lower()
-                    vis_name = p['teams']['away']['name'].lower()
+                    loc_api = normalizar_texto(p['teams']['home']['name'])
+                    vis_api = normalizar_texto(p['teams']['away']['name'])
                     
-                    # Coincidencia flexible de nombres
-                    if (s_loc in loc_name or loc_name in s_loc) and (s_vis in vis_name or vis_name in s_vis):
-                        return p
+                    # Similitud en porcentaje entre lo ingresado y la API
+                    score_loc = max(fuzz.ratio(s_loc, loc_api), fuzz.partial_ratio(s_loc, loc_api))
+                    score_vis = max(fuzz.ratio(s_vis, vis_api), fuzz.partial_ratio(s_vis, vis_api))
+                    
+                    puntaje_total = (score_loc + score_vis) / 2
+                    
+                    # Umbral del 65% para asegurar que es el partido correcto
+                    if puntaje_total > 65 and puntaje_total > puntaje_maximo:
+                        puntaje_maximo = puntaje_total
+                        mejor_coincidencia = p
+                        
+                return mejor_coincidencia
         return None
     except Exception:
         return None
@@ -54,11 +84,11 @@ def obtener_lineups_oficiales(fixture_id):
     }
     params = {'fixture': fixture_id}
     try:
-        response = requests.get(url, headers=headers, params=params, timeout=5)
+        response = requests.get(url, headers=headers, params=params, timeout=6)
         if response.status_code == 200:
             data = response.json()
             if data.get('response') and len(data['response']) >= 2:
-                return data['response'] # Trae ambos equipos confirmados
+                return data['response'] # Trae alineación confirmada de ambos equipos
         return None
     except Exception:
         return None
@@ -139,16 +169,16 @@ with col1:
         "Otra liga / Torneo personalizado"
     ]
     liga = st.selectbox("Liga / Torneo", lista_ligas)
-    local = st.text_input("Equipo Local", value="Qarabag")
+    local = st.text_input("Equipo Local", value="Bolivar")
 with col2:
     fecha_consulta = st.date_input("Fecha", datetime.date.today())
-    visitante = st.text_input("Equipo Visitante", value="CSKA Sofia")
+    visitante = st.text_input("Equipo Visitante", value="Gremio")
 
 if st.button("🔎 Generar Análisis Quirúrgico Completo"):
-    with st.spinner("Ejecutando escaneo cuántico por fecha en API..."):
+    with st.spinner("Ejecutando escaneo cuántico universal en API..."):
         fecha_str = fecha_consulta.strftime("%Y-%m-%d")
         
-        # 1. API Rastreos por Fecha Exacta
+        # 1. API Rastreos Universales con Fuzzy Matching
         datos_partido = obtener_datos_partido_por_fecha(local, visitante, fecha_str)
         
         # 2. Análisis Quirúrgico
@@ -175,7 +205,7 @@ if st.button("🔎 Generar Análisis Quirúrgico Completo"):
                     else:
                         reporte_clima = f"☀️ Clima óptimo ({temp}°C)."
             
-            # Chequeo de alineaciones directas
+            # Chequeo de alineaciones directas por Fixture ID atrapado
             if fixture_id:
                 lineups = obtener_lineups_oficiales(fixture_id)
                 if not lineups:
