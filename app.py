@@ -18,13 +18,14 @@ st.divider()
 # --- FUNCIONES DE INTEGRACIÓN Y ANÁLISIS QUIRÚRGICO ---
 
 def obtener_datos_partido(equipo_local, equipo_visitante):
-    """Consulta la API-Football para obtener información real del partido."""
+    """Consulta la API-Football para obtener información real del partido y sus alineaciones."""
     url = f"https://{API_FOOTBALL_HOST}/fixtures"
     headers = {
         'x-rapidapi-host': API_FOOTBALL_HOST,
         'x-rapidapi-key': API_FOOTBALL_KEY
     }
-    params = {'search': equipo_local}
+    # Búsqueda más flexible
+    params = {'search': equipo_local.strip()}
     try:
         response = requests.get(url, headers=headers, params=params, timeout=5)
         if response.status_code == 200:
@@ -32,9 +33,32 @@ def obtener_datos_partido(equipo_local, equipo_visitante):
             if data.get('response'):
                 partidos = data['response']
                 for p in partidos:
-                    away = p['teams']['away']['name'].lower()
-                    if equipo_visitante.lower() in away or away in equipo_visitante.lower():
+                    away_name = p['teams']['away']['name'].lower()
+                    loc_name = p['teams']['home']['name'].lower()
+                    search_vis = equipo_visitante.lower().strip()
+                    search_loc = equipo_local.lower().strip()
+                    
+                    if (search_loc in loc_name or loc_name in search_loc) and \
+                       (search_vis in away_name or away_name in search_vis):
                         return p
+        return None
+    except Exception:
+        return None
+
+def obtener_lineups_oficiales(fixture_id):
+    """Consulta directamente el endpoint de alineaciones oficiales confirmadas."""
+    url = f"https://{API_FOOTBALL_HOST}/fixtures/lineups"
+    headers = {
+        'x-rapidapi-host': API_FOOTBALL_HOST,
+        'x-rapidapi-key': API_FOOTBALL_KEY
+    }
+    params = {'fixture': fixture_id}
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('response') and len(data['response']) >= 2:
+                return data['response'] # Trae los 2 equipos con sus 11 titulares
         return None
     except Exception:
         return None
@@ -130,12 +154,14 @@ if st.button("🔎 Generar Análisis Quirúrgico Completo"):
         
         alertas_auto = []
         reporte_clima = "☀️ Clima normal y favorable para el desarrollo táctico."
-        reporte_alineaciones = "✅ Alineaciones y cuerpos técnicos confirmados."
+        reporte_alineaciones = "✅ Alineaciones y cuerpos técnicos confirmados en API."
         
         if datos_partido:
+            fixture_id = datos_partido.get('fixture', {}).get('id')
             venue = datos_partido.get('fixture', {}).get('venue', {})
             lat, lon = venue.get('latitude'), venue.get('longitude')
             
+            # Chequeo de clima
             if lat and lon:
                 clima = obtener_clima_estadio(lat, lon)
                 if clima:
@@ -147,13 +173,20 @@ if st.button("🔎 Generar Análisis Quirúrgico Completo"):
                     else:
                         reporte_clima = f"☀️ Clima óptimo ({temp}°C)."
             
-            lineups = datos_partido.get('lineups', [])
-            if not lineups or len(lineups) < 2:
+            # Chequeo de alineaciones directas por ID de partido
+            if fixture_id:
+                lineups = obtener_lineups_oficiales(fixture_id)
+                if not lineups:
+                    alertas_auto.append("Alineaciones oficiales aún no confirmadas por el club en la base de datos de la API")
+                    reporte_alineaciones = "⚠️ Nóminas pendientes por confirmación oficial en API."
+                else:
+                    reporte_alineaciones = "✅ Alineaciones 100% confirmadas con titulares en API."
+            else:
                 alertas_auto.append("Alineaciones oficiales aún no confirmadas en API")
-                reporte_alineaciones = "⚠️ Nóminas pendientes por confirmación oficial."
+                reporte_alineaciones = "⚠️ Nóminas pendientes por confirmación oficial en API."
         else:
-            alertas_auto.append("Alineaciones oficiales aún no confirmadas en API")
-            reporte_alineaciones = "⚠️ Nóminas pendientes por confirmación oficial."
+            alertas_auto.append("Partido no enlazado con API en vivo (Verifica los nombres de los equipos)")
+            reporte_alineaciones = "⚠️ No se pudo verificar la nómina automáticamente."
 
         # Guardar en estado
         st.session_state['analizado'] = True
@@ -186,7 +219,7 @@ if st.session_state.get('analizado', False):
                 f"**Mercado:** {an['secundario']}\n\n"
                 f"**Cuota Justa:** {an['cuota_s']:.2f} | **Prob. Real:** {an['prob_s']}%")
     
-    # Desglose de Perfiles (Optimizado para móvil sin recortes de texto)
+    # Desglose de Perfiles
     st.markdown("### 📊 Desglose de Escenarios por Perfil")
     st.markdown(f"🛡️ **Conservador:** {an['conservador']} `(Cuota ~{an['cuota_c']:.2f})`")
     st.markdown(f"⚖️ **Moderado (Principal):** {an['principal']} `(Cuota ~{an['cuota_p']:.2f})`")
@@ -194,15 +227,15 @@ if st.session_state.get('analizado', False):
 
     # DIAGNÓSTICO AUTOMÁTICO DE APIS
     st.write("---")
-    st.markdown("### 🛡️ Diagnóstico de Seguridad Automático (API)")
+    st.markdown("### 🛡️ Diagnóstico de Seguridad Automático")
     st.write(f"- **Clima del Estadio:** {st.session_state.get('reporte_clima')}")
     st.write(f"- **Estado de Nóminas y Planteamiento:** {st.session_state.get('reporte_alineaciones')}")
     
     alertas_encontradas = st.session_state.get('alertas_auto', [])
     if alertas_encontradas:
-        st.warning("**Alertas de riesgo detectadas por la API:**\n" + "\n".join([f"• {a}" for a in alertas_encontradas]))
+        st.warning("**Alertas de riesgo detectadas:**\n" + "\n".join([f"• {a}" for a in alertas_encontradas]))
     else:
-        st.success("🟢 **Filtro Limpio:** Cero riesgos detectados automáticamente. Partido apto.")
+        st.success("🟢 **Filtro Limpio:** Cero riesgos detectados. Partido apto.")
 
     st.write("---")
     st.markdown("**Verificación de Cuota en Betplay:**")
@@ -219,11 +252,11 @@ if st.session_state.get('analizado', False):
         
         if len(alertas_encontradas) > 0 or ev <= 0:
             st.error("DECISIÓN: NO APUESTO 🛑")
-            st.write(f"**Razones del rechazo automático:**")
+            st.write(f"**Razones del rechazo:**")
             if ev <= 0:
                 st.write(f"- La cuota en Betplay ({cuota_betplay}) no supera el margen de Valor Positivo (+EV) frente a la Cuota Justa ({cuota_j:.2f}).")
             if len(alertas_encontradas) > 0:
-                st.write(f"- Bloqueo automático por alertas activas:")
+                st.write(f"- Bloqueo por alertas activas:")
                 for al in alertas_encontradas:
                     st.write(f"  • {al}")
         else:
