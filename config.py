@@ -1,10 +1,9 @@
 # ==========================================
 # PRONOSTICADOR ÉLITE PROFESIONAL
 # Motor de Inteligencia Deportiva IA SneiderMompi (SALM)
-# Configuración General
 # ==========================================
 
-API_KEY = "TU_API_KEY"
+API_KEY = "3e69e51ac95c094a672f790edac978b0"
 
 HOST = "v3.football.api-sports.io"
 
