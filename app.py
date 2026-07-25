@@ -116,20 +116,7 @@ def obtener_clima_estadio(lat, lon):
 
 # --- CONSULTAS PROFUNDAS DE API (ESTADÍSTICAS, H2H Y PREDICCIONES) ---
 
-def obtener_estadisticas_detalladas(fixture_id):
-    """Consulta estadísticas completas (córneres, disparos, tarjetas, faltas)."""
-    url = f"https://{API_FOOTBALL_HOST}/fixtures/statistics"
-    headers = {'x-rapidapi-host': API_FOOTBALL_HOST, 'x-rapidapi-key': API_FOOTBALL_KEY}
-    try:
-        res = requests.get(url, headers=headers, params={'fixture': fixture_id}, timeout=8)
-        if res.status_code == 200:
-            return res.json().get('response', [])
-    except Exception:
-        pass
-    return []
-
 def obtener_historial_h2h(team1_id, team2_id):
-    """Consulta los últimos enfrentamientos directos entre ambos clubes."""
     url = f"https://{API_FOOTBALL_HOST}/fixtures/headtohead"
     headers = {'x-rapidapi-host': API_FOOTBALL_HOST, 'x-rapidapi-key': API_FOOTBALL_KEY}
     params = {'h2h': f"{team1_id}-{team2_id}", 'last': 5}
@@ -142,7 +129,6 @@ def obtener_historial_h2h(team1_id, team2_id):
     return []
 
 def obtener_historial_reciente(team_id):
-    """Consulta los últimos 5 partidos jugados por un equipo."""
     url = f"https://{API_FOOTBALL_HOST}/fixtures"
     headers = {'x-rapidapi-host': API_FOOTBALL_HOST, 'x-rapidapi-key': API_FOOTBALL_KEY}
     params = {'team': team_id, 'last': 5}
@@ -182,7 +168,7 @@ def motor_analisis_quirurgico_integral(fixture_data, home_name, away_name, liga_
     pf_home, pc_home = procesar_goles(hist_home, home_id, True)
     pf_away, pc_away = procesar_goles(hist_away, away_id, False)
 
-    lambda_home = max(0.2, (pf_home + pc_contra if 'pc_contra' in locals() else (pf_home + pc_away) / 2))
+    lambda_home = max(0.2, (pf_home + pc_away) / 2)
     lambda_away = max(0.2, (pf_away + pc_home) / 2)
     expectativa_goles = lambda_home + lambda_away
 
@@ -218,8 +204,8 @@ def motor_analisis_quirurgico_integral(fixture_data, home_name, away_name, liga_
     h2h_btts_count = 0
     if hist_h2h:
         for match in hist_h2h:
-            gh = match['goals']['home'] or 0
-            ga = match['goals']['away'] or 0
+            gh = match['goals']['home'] if match['goals']['home'] is not None else 0
+            ga = match['goals']['away'] if match['goals']['away'] is not None else 0
             h2h_goles_total += (gh + ga)
             if gh > 0 and ga > 0:
                 h2h_btts_count += 1
@@ -227,15 +213,13 @@ def motor_analisis_quirurgico_integral(fixture_data, home_name, away_name, liga_
     else:
         promedio_h2h_goles = expectativa_goles
 
-    # 3. Estimación Táctica de Córneres y Tarjetas (Proyección de Datos)
-    # Estimación de tiros de esquina según dinámica de ataque y liga
+    # 3. Estimación Táctica de Córneres y Tarjetas
     promedio_corners_est = 8.5 + (lambda_home + lambda_away) * 0.8
-    promedio_tarjetas_est = 4.5 if "BetPlay" in liga_nombre or "Argentina" in liga_nombre else 3.8
+    promedio_tarjetas_est = 4.5 if ("BetPlay" in liga_nombre or "Argentina" in liga_nombre) else 3.8
 
     # --- MATRIZ EVALUADORA LIBRE DE SESGO (EVALÚA TODOS LOS MERCADOS) ---
     candidatos_mercados = []
 
-    # Opción A: Córneres (Si la dinámica es de alto ataque por bandas o liga intensa)
     if promedio_corners_est >= 9.5:
         candidatos_mercados.append({
             "mercado": "Más de 7.5 Tiros de Esquina (Córneres Totales)",
@@ -244,7 +228,6 @@ def motor_analisis_quirurgico_integral(fixture_data, home_name, away_name, liga_
             "razon": f"Ambos clubes proyectan un volumen ofensivo de {promedio_corners_est:.1f} tiros de esquina por partido."
         })
 
-    # Opción B: Tarjetas (Ligas de alta fricción o clásicos de alta intensidad)
     if promedio_tarjetas_est >= 4.5:
         candidatos_mercados.append({
             "mercado": "Más de 3.5 Tarjetas Totales en el Partido",
@@ -253,7 +236,6 @@ def motor_analisis_quirurgico_integral(fixture_data, home_name, away_name, liga_
             "razon": f"Intensidad de juego alta en {liga_nombre} con promedio de {promedio_tarjetas_est} amonestaciones por encuentro."
         })
 
-    # Opción C: Ambos Anotan
     if prob_btts >= 0.58 and h2h_btts_count >= 3:
         candidatos_mercados.append({
             "mercado": "Ambos Equipos Anotan (Sí)",
@@ -262,7 +244,6 @@ def motor_analisis_quirurgico_integral(fixture_data, home_name, away_name, liga_
             "razon": f"Alta frecuencia ofensiva. Ambos anotaron en {h2h_btts_count} de los últimos {len(hist_h2h)} enfrentamientos directos."
         })
 
-    # Opción D: Under 2.5 Goles (Partido cerrado/defensivo)
     if expectativa_goles <= 2.10 and promedio_h2h_goles <= 2.2:
         candidatos_mercados.append({
             "mercado": "Menos de 2.5 Goles Totales (Under 2.5)",
@@ -271,7 +252,6 @@ def motor_analisis_quirurgico_integral(fixture_data, home_name, away_name, liga_
             "razon": f"Expectativa de gol muy reducida ({expectativa_goles:.2f}). Tendencia defensiva marcada en ambos bloques."
         })
 
-    # Opción E: Over 1.5 Goles Totales
     if expectativa_goles >= 2.4 and prob_over_15 >= 0.75:
         candidatos_mercados.append({
             "mercado": "Más de 1.5 Goles Totales en el Partido",
@@ -280,7 +260,6 @@ def motor_analisis_quirurgico_integral(fixture_data, home_name, away_name, liga_
             "razon": f"Ritmo de juego fluido con expectativa conjunta de {expectativa_goles:.2f} goles."
         })
 
-    # Opción F: Apuesta Sin Empate (DNB) Local o Visitante
     if prob_home_win >= 0.52:
         candidatos_mercados.append({
             "mercado": f"Gana {home_name} Sin Empate (Empate No Válido)",
@@ -296,7 +275,6 @@ def motor_analisis_quirurgico_integral(fixture_data, home_name, away_name, liga_
             "razon": f"{away_name} presenta métricas superiores como visitante ({pf_away:.1f} goles por juego)."
         })
 
-    # Fallback de Seguridad si el encuentro es sumamente cerrado
     if not candidatos_mercados:
         candidatos_mercados.append({
             "mercado": f"Gana o Empata {home_name} (Doble Chance 1X)",
@@ -311,17 +289,14 @@ def motor_analisis_quirurgico_integral(fixture_data, home_name, away_name, liga_
             "razon": "Margen de seguridad amplio para ritmo de juego conservador."
         })
 
-    # Ordenar por probabilidad matemática real de mayor a menor
     candidatos_mercados = sorted(candidatos_mercados, key=lambda x: x['prob'], reverse=True)
 
-    # Seleccionar Pronóstico Principal (Riesgo Bajo) y Secundario (Riesgo Bajo-Medio)
     principal = candidatos_mercados[0]
     secundario = candidatos_mercados[1] if len(candidatos_mercados) > 1 else candidatos_mercados[0]
 
     cuota_p = round(1 / (principal['prob'] / 100), 2)
     cuota_s = round(1 / (secundario['prob'] / 100), 2)
 
-    # Redacción de la Argumentación Táctica Profesional
     argumentacion = (
         f"**1. Desempeño y Momento:** {home_name} registra {pf_home:.1f} goles anotados y {pc_home:.1f} recibidos por partido en sus últimos 5 compromisos. "
         f"Por su parte, {away_name} promedia {pf_away:.1f} goles a favor y {pc_away:.1f} en contra.\n\n"
@@ -455,5 +430,33 @@ if st.session_state.get('analizado', False):
         st.write("---")
         st.markdown(f"**Verificación de Cuota para:** `{mercado_evaluar}`")
         cuota_betplay = st.number_input(
-            f"Ingresa la cuota actual en Betplay para '{mercado_evaluar}':", 
-            min_value=1.01, max_value=20.0, valu
+            label=f"Ingresa la cuota actual en Betplay para '{mercado_evaluar}':", 
+            min_value=1.01, max_value=20.0, value=1.75, step=0.01,
+            key="input_cuota_betplay"
+        )
+        
+        st.write("---")
+        st.markdown("### 🛡️ Diagnóstico de Seguridad Automático")
+        st.write(f"- **Clima:** {st.session_state.get('reporte_clima')}")
+        st.write(f"- **Nóminas:** {st.session_state.get('reporte_alineaciones')}")
+        
+        alertas_encontradas = st.session_state.get('alertas_auto', [])
+        if alertas_encontradas:
+            st.warning("**Alertas de riesgo detectadas:**\n" + "\n".join([f"• {a}" for a in alertas_encontradas]))
+        else:
+            st.success("🟢 **Filtro Limpio:** Cero riesgos detectados. Partido apto.")
+
+        # --- SECCIÓN 3: VEREDICTO DE LA REGLA DE ORO ---
+        st.divider()
+        if st.button("⚡ EVALUAR Y APLICAR REGLA DE ORO"):
+            prob_estimada = 1 / cuota_justa_evaluar
+            ev = (prob_estimada * cuota_betplay) - 1
+            
+            st.subheader("3. Veredicto Final")
+            
+            if len(alertas_encontradas) > 0 or ev <= 0:
+                st.error("DECISIÓN: NO APUESTO 🛑")
+                st.write(f"**Razones del rechazo:**")
+                if ev <= 0:
+                    st.write(f"- La cuota en Betplay ({cuota_betplay}) no ofrece Valor Positivo (+EV) frente a la Cuota Justa ({cuota_justa_evaluar:.2f}).")
+                if len(a
