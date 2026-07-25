@@ -1,47 +1,39 @@
+from api.football_api import FootballAPI
+
+
 class Analyzer:
+
+    def __init__(self):
+
+        self.api = FootballAPI()
 
     def analizar(self, datos_partido):
 
         """
-        Analizador principal de SALM.
+        datos_partido debe contener:
 
-        Este módulo recibe toda la información del partido
-        y devuelve un resumen estructurado para que el motor
-        tome la decisión.
+        {
+            "fixture_id":...,
+            "home_id":...,
+            "away_id":...
+        }
         """
 
-        resultado = {
+        home = datos_partido["home_id"]
+        away = datos_partido["away_id"]
 
-            "ataque_local": 50,
+        recientes_local = self.api.ultimos_partidos(home)
 
-            "defensa_local": 50,
+        recientes_visitante = self.api.ultimos_partidos(away)
 
-            "ataque_visitante": 50,
+        h2h = self.api.head_to_head(home, away)
 
-            "defensa_visitante": 50,
+        return {
 
-            "forma_local": 50,
+            "recientes_local": recientes_local,
 
-            "forma_visitante": 50,
+            "recientes_visitante": recientes_visitante,
 
-            "confianza": 50,
-
-            "riesgo": "MEDIO",
-
-            "mercados": [
-
-                "Más de 1.5 goles",
-
-                "Menos de 3.5 goles",
-
-                "Ambos anotan",
-
-                "Doble oportunidad 1X",
-
-                "Empate no acción Local"
-
-            ]
+            "h2h": h2h
 
         }
-
-        return resultado
