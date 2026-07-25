@@ -2,8 +2,7 @@ import streamlit as st
 import datetime, requests, math, unicodedata
 from rapidfuzz import fuzz
 from config import *
-API_KEY = "3e69e51ac95c094a672f790edac978b0"
-HOST = "v3.football.api-sports.io"
+
 
 st.set_page_config(page_title="Pronosticador Élite App", page_icon="⚽", layout="centered")
 st.title("⚽ PRONOSTICADOR ÉLITE 90%")
