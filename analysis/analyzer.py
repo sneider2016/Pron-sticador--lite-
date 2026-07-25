@@ -1,13 +1,47 @@
 class Analyzer:
 
-    def calcular_probabilidad(self, datos):
-        return 0
+    def analizar(self, datos_partido):
 
-    def calcular_confianza(self, datos):
-        return 0
+        """
+        Analizador principal de SALM.
 
-    def calcular_ev(self, cuota, probabilidad):
-        return 0
+        Este módulo recibe toda la información del partido
+        y devuelve un resumen estructurado para que el motor
+        tome la decisión.
+        """
 
-    def detectar_alertas(self, datos):
-        return []
+        resultado = {
+
+            "ataque_local": 50,
+
+            "defensa_local": 50,
+
+            "ataque_visitante": 50,
+
+            "defensa_visitante": 50,
+
+            "forma_local": 50,
+
+            "forma_visitante": 50,
+
+            "confianza": 50,
+
+            "riesgo": "MEDIO",
+
+            "mercados": [
+
+                "Más de 1.5 goles",
+
+                "Menos de 3.5 goles",
+
+                "Ambos anotan",
+
+                "Doble oportunidad 1X",
+
+                "Empate no acción Local"
+
+            ]
+
+        }
+
+        return resultado
