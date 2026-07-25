@@ -110,7 +110,7 @@ def obtener_lineups_oficiales(fixture_id):
 
 def obtener_clima_estadio(lat, lon):
     try:
-        url = f"https://api.api-open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
             return response.json().get('current_weather', {})
@@ -118,10 +118,10 @@ def obtener_clima_estadio(lat, lon):
     except Exception:
         return None
 
-# --- OPCIÓN A: MOTOR DE ANÁLISIS BASADO EN DATOS REALES DE LA API Y POISSON ---
+# --- MOTOR ESTADÍSTICO DE POISSON Y SELECCIÓN DINÁMICA DE MERCADOS ---
 
 def obtener_historial_equipo(team_id):
-    """Consulta los últimos 5 partidos jugados por un equipo para calcular sus promedios de gol."""
+    """Consulta los últimos 5 partidos jugados por un equipo."""
     url = f"https://{API_FOOTBALL_HOST}/fixtures"
     headers = {
         'x-rapidapi-host': API_FOOTBALL_HOST,
@@ -142,14 +142,14 @@ def calcular_poisson(k, lambda_val):
 
 def motor_analisis_quirurgico_real(team_home_id, team_away_id, home_name, away_name, liga_nombre):
     """
-    Analiza estadísticas reales del API, calcula esperanzas de gol y aplica el Modelo Poisson de forma DINÁMICA.
+    Analiza estadísticas reales del API y evalúa múltiples mercados según las probabilidades reales.
     """
-    hist_home = obtener_historial_equipo(team_home_id)
-    hist_away = obtener_historial_equipo(team_away_id)
+    hist_home = obtener_historial_equipo(team_home_id) if team_home_id != 0 else []
+    hist_away = obtener_historial_equipo(team_away_id) if team_away_id != 0 else []
     
     # Procesar promedios reales de goles del local
-    goles_f_home, goles_c_home = 0, 0
     if hist_home:
+        goles_f_home, goles_c_home = 0, 0
         for m in hist_home:
             is_home = m['teams']['home']['id'] == team_home_id
             goles_f_home += m['goals']['home'] if is_home else m['goals']['away']
@@ -157,14 +157,13 @@ def motor_analisis_quirurgico_real(team_home_id, team_away_id, home_name, away_n
         p_f_home = goles_f_home / len(hist_home)
         p_c_home = goles_c_home / len(hist_home)
     else:
-        # Ponderación basada en el hash del nombre para evitar repetir números fijos si falla el historial API
         seed = sum(ord(c) for c in home_name)
         p_f_home = 1.1 + (seed % 5) * 0.1
         p_c_home = 0.9 + (seed % 4) * 0.1
 
     # Procesar promedios reales de goles del visitante
-    goles_f_away, goles_c_away = 0, 0
     if hist_away:
+        goles_f_away, goles_c_away = 0, 0
         for m in hist_away:
             is_away = m['teams']['away']['id'] == team_away_id
             goles_f_away += m['goals']['away'] if is_away else m['goals']['home']
@@ -179,13 +178,12 @@ def motor_analisis_quirurgico_real(team_home_id, team_away_id, home_name, away_n
     # Expectativa de goles para el partido (Lambda)
     lambda_home = max(0.2, (p_f_home + p_c_away) / 2)
     lambda_away = max(0.2, (p_f_away + p_c_home) / 2)
-    
-    # Calcular matriz de probabilidades de marcadores (hasta 5x5)
-    prob_home_win = 0.0
-    prob_draw = 0.0
-    prob_away_win = 0.0
-    prob_under_35 = 0.0
-    
+    expectativa_total = lambda_home + lambda_away
+
+    # Matriz completa de probabilidades (Marcadores hasta 5x5)
+    prob_home_win, prob_draw, prob_away_win = 0.0, 0.0, 0.0
+    prob_under_25, prob_under_35 = 0.0, 0.0
+
     for i in range(6):
         for j in range(6):
             p = calcular_poisson(i, lambda_home) * calcular_poisson(j, lambda_away)
@@ -195,27 +193,60 @@ def motor_analisis_quirurgico_real(team_home_id, team_away_id, home_name, away_n
                 prob_draw += p
             else:
                 prob_away_win += p
-            
+
+            if (i + j) <= 2:
+                prob_under_25 += p
             if (i + j) < 3.5:
                 prob_under_35 += p
 
     prob_1x = prob_home_win + prob_draw
     prob_x2 = prob_away_win + prob_draw
     
-    # Evaluación de mercado óptimo según los datos reales
-    if prob_1x >= prob_x2 and lambda_home >= lambda_away:
-        mercado_p = f"Gana o Empata {home_name} + Under 3.5 Goles"
-        prob_real = min(88, max(50, int((prob_1x * 0.6 + prob_under_35 * 0.4) * 100)))
-        mercado_r = f"Gana {home_name} Sin Empate (Apuesta Sin Empate)"
-        prob_real_r = min(82, max(45, int(prob_home_win * 100)))
-    else:
-        mercado_p = f"Gana o Empata {away_name} + Under 3.5 Goles"
-        prob_real = min(88, max(50, int((prob_x2 * 0.6 + prob_under_35 * 0.4) * 100)))
-        mercado_r = f"Under 2.5 Goles Totales en el Partido"
-        prob_real_r = min(82, max(45, int(prob_under_35 * 100)))
+    # Probabilidad de Apuesta Sin Empate (DNB)
+    prob_dnb_home = prob_home_win / (prob_home_win + prob_away_win) if (prob_home_win + prob_away_win) > 0 else 0.5
+    prob_dnb_away = prob_away_win / (prob_home_win + prob_away_win) if (prob_home_win + prob_away_win) > 0 else 0.5
+    prob_btts = (1 - calcular_poisson(0, lambda_home)) * (1 - calcular_poisson(0, lambda_away))
 
-    cuota_p = round(1 / (prob_real / 100), 2)
-    cuota_r = round(1 / (prob_real_r / 100), 2)
+    # --- MATRIZ DE DECISIÓN QUIRÚRGICA Y DIVERSIFICADA ---
+    # Busca la opción de valor real según la probabilidad dominante sin amarrarse al 1X
+
+    if prob_home_win >= 0.55:
+        # 1. Local Dominante -> Victoria Directa Local
+        mercado_p = f"Gana {home_name} (Victoria Directa)"
+        prob_real = int(prob_home_win * 100)
+        mercado_r = f"Gana {home_name} Sin Empate (DNB)"
+        prob_real_r = int(prob_dnb_home * 100)
+
+    elif prob_away_win >= 0.45:
+        # 2. Visitante Superior o Favorito -> Apuesta Sin Empate Visitante / X2
+        mercado_p = f"Gana {away_name} Sin Empate (DNB)"
+        prob_real = int(prob_dnb_away * 100)
+        mercado_r = f"Gana o Empata {away_name} (X2)"
+        prob_real_r = int(prob_x2 * 100)
+
+    elif expectativa_total <= 2.10:
+        # 3. Partido muy cerrado / defensivo -> Under 2.5 puro
+        mercado_p = "Menos de 2.5 Goles Totales (Under 2.5)"
+        prob_real = int(prob_under_25 * 100)
+        mercado_r = f"Gana {home_name} Sin Empate (DNB)"
+        prob_real_r = int(prob_dnb_home * 100)
+
+    elif lambda_home >= 1.3 and lambda_away >= 1.2:
+        # 4. Ofensivas fuertes -> Ambos Anotan
+        mercado_p = "Ambos Equipos Anotan (Sí)"
+        prob_real = int(prob_btts * 100)
+        mercado_r = "Más de 2.5 Goles Totales (Over 2.5)"
+        prob_real_r = int((1 - prob_under_25) * 100)
+
+    else:
+        # 5. Partido Parejo -> Apuesta Sin Empate Local (DNB)
+        mercado_p = f"Gana {home_name} Sin Empate (Empate No Válido)"
+        prob_real = int(prob_dnb_home * 100)
+        mercado_r = f"Gana o Empata {home_name} + Under 3.5 Goles"
+        prob_real_r = int((prob_1x * 0.6 + prob_under_35 * 0.4) * 100)
+
+    cuota_p = round(1 / (prob_real / 100), 2) if prob_real > 0 else 2.0
+    cuota_r = round(1 / (prob_real_r / 100), 2) if prob_real_r > 0 else 2.0
 
     tactica = (
         f"Análisis estadístico sobre los últimos 5 partidos de cada club en {liga_nombre}. "
@@ -245,15 +276,14 @@ with col1:
         "Copa Sudamericana", "Liga BetPlay (Colombia)", "Brasileirão (Brasil)", "Liga Profesional (Argentina)", "Otra liga"
     ]
     liga = st.selectbox("Liga / Torneo", lista_ligas)
-    local = st.text_input("Equipo Local", value="Racing Club")
+    local = st.text_input("Equipo Local", value="Deportivo Cali")
 with col2:
     fecha_consulta = st.date_input("Fecha", datetime.date.today())
-    visitante = st.text_input("Equipo Visitante", value="Gimnasia L.P.")
+    visitante = st.text_input("Equipo Visitante", value="Jaguares")
 
 confirmacion_manual = st.checkbox("⚙️ Confirmar alineaciones manualmente (Bypass si ya las viste en prensa)")
 
 if st.button("🔎 Generar Análisis Quirúrgico Completo"):
-    # Limpiar estado previo para obligar a recalcular si cambiaron los equipos
     st.session_state.clear()
     
     with st.spinner("Consultando estadísticas reales e historial en API..."):
@@ -271,10 +301,8 @@ if st.button("🔎 Generar Análisis Quirúrgico Completo"):
             home_real_name = datos_partido['teams']['home']['name']
             away_real_name = datos_partido['teams']['away']['name']
             
-            # Ejecución del análisis sobre la API real
             analisis = motor_analisis_quirurgico_real(home_id, away_id, home_real_name, away_real_name, liga)
 
-            # Verificación de Clima
             venue = datos_partido.get('fixture', {}).get('venue', {})
             lat, lon = venue.get('latitude'), venue.get('longitude')
             if lat and lon:
@@ -285,7 +313,6 @@ if st.button("🔎 Generar Análisis Quirúrgico Completo"):
                         alertas_auto.append(f"Temperatura extrema ({temp}°C)")
                         reporte_clima = f"⚠️ Temperatura extrema ({temp}°C)."
 
-            # Verificación de Nóminas
             if confirmacion_manual:
                 reporte_alineaciones = "✅ Alineaciones confirmadas manualmente por el usuario."
             else:
@@ -312,12 +339,10 @@ if st.session_state.get('analizado', False):
     an = st.session_state.get('analisis')
     
     st.subheader("2. Dictamen del Pronosticador Élite")
-    
     st.markdown("### 🔬 Análisis Estadístico Reales (Poisson)")
     st.write(f"_{an['tactica']}_")
     
     st.write("---")
-    
     st.success(f"🎯 **PRONÓSTICO PRINCIPAL RECOMENDADO**\n\n"
                f"**Mercado:** {an['principal']}\n\n"
                f"**Cuota Justa Calculada:** {an['cuota_p']:.2f} | **Prob. Real Estimada:** {an['prob_p']}%")
@@ -404,4 +429,4 @@ if st.session_state.get('analizado', False):
 st.divider()
 if st.button("🔄 Analizar Otro Partido"):
     st.session_state.clear()
-    st.rerun()
+    st.rerun()  
