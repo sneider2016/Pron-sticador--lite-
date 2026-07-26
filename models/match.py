@@ -39,7 +39,7 @@ class Match:
     estimated_probability: float = 0.0
     fair_odds: float = 0.0
 
-    confidence: str = ""
+    confidence: float = 0.0
     risk: str = ""
 
     explanation: str = ""
@@ -49,7 +49,5 @@ class Match:
     # Integración BetPlay
     # ==========================
     betplay_odds: Optional[float] = None
-
     expected_value: float = 0.0
-
     final_decision: str = ""
