@@ -2,15 +2,27 @@ import datetime
 import os
 import sys
 
-# Garantizar que Streamlit Cloud reconozca la raíz del proyecto para importar módulos locales
+# Agregar la raíz del proyecto a sys.path para habilitar la importación de carpetas
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 import streamlit as st
 from config import APP_NAME
-from salm_engine import SALMEngine
 from utils.helpers import formatear_moneda
+
+# Importación desde la carpeta engine/salm_engine.py
+try:
+    from engine.salm_engine import SALMEngine
+except ModuleNotFoundError:
+    try:
+        from salm_engine import SALMEngine
+    except ModuleNotFoundError as err:
+        st.error(
+            f"⚠️ No se pudo cargar 'engine/salm_engine.py'. "
+            f"Verifica la estructura de archivos en GitHub. Detalle: {err}"
+        )
+        st.stop()
 
 st.set_page_config(page_title="Pronosticador Élite App", page_icon="⚽", layout="centered")
 st.title("⚽ PRONOSTICADOR ÉLITE 90%")
