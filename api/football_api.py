@@ -99,3 +99,82 @@ class FootballAPI:
             }
 
         )
+    def obtener_ligas(self):
+
+        return self.consultar(
+
+            "leagues",
+
+            {
+
+                "current": "true"
+
+            }
+
+        )
+
+    def obtener_equipos(self, league_id, season):
+
+        return self.consultar(
+
+            "teams",
+
+            {
+
+                "league": league_id,
+
+                "season": season
+
+            }
+
+        )
+
+    def obtener_fixtures(self, league_id, season, fecha):
+
+        return self.consultar(
+
+            "fixtures",
+
+            {
+
+                "league": league_id,
+
+                "season": season,
+
+                "date": fecha
+
+            }
+
+        )
+
+    def obtener_clasificacion(self, league_id, season):
+
+        return self.consultar(
+
+            "standings",
+
+            {
+
+                "league": league_id,
+
+                "season": season
+
+            }
+
+        )
+
+    def obtener_lesiones(self, league_id, season):
+
+        return self.consultar(
+
+            "injuries",
+
+            {
+
+                "league": league_id,
+
+                "season": season
+
+            }
+
+        )
