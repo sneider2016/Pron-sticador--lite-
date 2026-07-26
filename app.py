@@ -1,9 +1,16 @@
 import datetime
+import os
+import sys
+
+# Garantizar que Streamlit Cloud reconozca la raíz del proyecto para importar módulos locales
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 import streamlit as st
 from config import APP_NAME
 from salm_engine import SALMEngine
 from utils.helpers import formatear_moneda
-
 
 st.set_page_config(page_title="Pronosticador Élite App", page_icon="⚽", layout="centered")
 st.title("⚽ PRONOSTICADOR ÉLITE 90%")
