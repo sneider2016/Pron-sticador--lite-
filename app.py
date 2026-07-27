@@ -5,12 +5,19 @@ from typing import Dict, List, Optional
 
 try:
     from rapidfuzz import fuzz
-    def similarity(s1: str, s2: str) -> float: return fuzz.ratio(s1, s2)
+    def calcular_similitud(s1: str, s2: str) -> float: return fuzz.ratio(s1, s2)
 except ImportError:
     from difflib import SequenceMatcher
-    def similarity(s1: str, s2: str) -> float: return SequenceMatcher(None, s1, s2).ratio() * 100.0
+    def calcular_similitud(s1: str, s2: str) -> float: return SequenceMatcher(None, s1, s2).ratio() * 100.0
 
-API_KEY, HOST, APP_NAME = "3e69e51ac95c094a672f790edac978b0", "v3.football.api-sports.io", "Pronósticador Élite Profesional"
+# ==========================================
+# CONFIGURACIÓN Y MULTI-CLAVES (AGREGA TUS CLAVES AQUÍ)
+# ==========================================
+API_KEYS = [
+    "3e69e51ac95c094a672f790edac978b0",  # Clave 1
+    "14db0e108529faed46c94b3163188df5"        # Clave 2
+]
+HOST, APP_NAME = "v3.football.api-sports.io", "Pronósticador Élite Profesional"
 
 def normalizar(t: str) -> str:
     if not t: return ""
@@ -40,25 +47,44 @@ class Match:
 
 class FootballAPI:
     def __init__(self):
-        self.headers = {"x-rapidapi-host": HOST, "x-rapidapi-key": API_KEY, "x-apisports-key": API_KEY}
+        self.keys = [k.strip() for k in API_KEYS if k and "PEGA_AQUI" not in k]
+        self.key_idx = 0
         self.ultimo_error = ""
 
+    def obtener_headers(self) -> dict:
+        key = self.keys[self.key_idx] if self.keys else ""
+        return {"x-rapidapi-host": HOST, "x-rapidapi-key": key, "x-apisports-key": key}
+
     def consultar(self, endpoint: str, params: dict) -> list:
-        try:
-            r = requests.get(f"https://{HOST}/{endpoint}", headers=self.headers, params=params, timeout=10)
-            if r.status_code == 200:
-                data = r.json()
-                errs = data.get("errors")
-                if errs and isinstance(errs, dict) and len(errs) > 0:
-                    msg = str(errs)
-                    if "requests" in msg.lower() or "limit" in msg.lower():
-                        self.ultimo_error = "🛑 Límite de consultas alcanzado: Has agotado el cupo gratuito diario de 100 peticiones de tu API Key."
-                    else:
-                        self.ultimo_error = f"⚠️ Error en API-Football: {msg}"
-                    return []
-                return data.get("response", [])
-        except Exception as e:
-            self.ultimo_error = f"⚠️ Error de conexión con API-Football: {str(e)}"
+        if not self.keys:
+            self.ultimo_error = "🛑 No hay API Keys válidas configuradas en el sistema."
+            return []
+
+        intentos = len(self.keys)
+        for _ in range(intentos):
+            headers = self.obtener_headers()
+            try:
+                r = requests.get(f"https://{HOST}/{endpoint}", headers=headers, params=params, timeout=10)
+                if r.status_code == 200:
+                    data = r.json()
+                    errs = data.get("errors")
+                    if errs and isinstance(errs, dict) and len(errs) > 0:
+                        msg = str(errs).lower()
+                        if "requests" in msg or "limit" in msg or "suspended" in msg or "access" in msg:
+                            # Rotación automática a la siguiente clave
+                            self.key_idx = (self.key_idx + 1) % len(self.keys)
+                            continue
+                        else:
+                            self.ultimo_error = f"⚠️ Error API: {str(errs)}"
+                            return []
+                    return data.get("response", [])
+            except Exception as e:
+                self.ultimo_error = f"⚠️ Error de conexión: {str(e)}"
+            
+            # Rotar en caso de fallo de red
+            self.key_idx = (self.key_idx + 1) % len(self.keys)
+
+        self.ultimo_error = "🛑 Todas tus API Keys han agotado su cupo diario de 100 consultas o están suspendidas."
         return []
 
     def buscar_equipo(self, nombre: str) -> dict:
@@ -190,7 +216,7 @@ class SALMEngine:
                 local=loc_n, visitante=vis_n,
                 main_prediction="🛑 PRONÓSTICO SUSPENDIDO POR API",
                 market_ranking=[{"m": "Sin datos", "p": 0.0, "c": 999.0, "r": "Alto", "razon": err_text}],
-                explanation=f"**Atención:** {err_text}\n\n💡 **Sugerencia:** Si es un problema de límite, crea una API Key gratuita nueva en api-sports.io o espera al cambio de día.",
+                explanation=f"**Atención:** {err_text}",
                 alerts=[err_text]
             )
 
