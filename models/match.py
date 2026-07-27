@@ -25,6 +25,7 @@ class Match:
     h2h: List = field(default_factory=list)
     recent_form: Dict = field(default_factory=dict)
     injuries: List = field(default_factory=list)
+    lineups: Dict = field(default_factory=dict)
     trends: Dict = field(default_factory=dict)
 
     # ==========================
