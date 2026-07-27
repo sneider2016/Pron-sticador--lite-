@@ -212,6 +212,7 @@ class Analyzer:
             "prom_goles_h2h": round(prom_goles_h2h, 2),
             "corners_est": corners_est,
             "tarjetas_est": tarjetas_est,
+            "lineups_data": self.api.obtener_alineaciones(fixture_id) if fixture_id > 0 else [],
             "alertas": alertas,
             "confianza": "Alta" if datos_reales_exitosos else "Baja",
             "riesgo": "Bajo" if datos_reales_exitosos else "Alto"
