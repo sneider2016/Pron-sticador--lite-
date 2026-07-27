@@ -33,12 +33,11 @@ class FootballAPI:
 
     def buscar_equipo_por_nombre(self, nombre_equipo: str) -> dict:
         """
-        Busca directamente un equipo por nombre para obtener su ID real si la fecha falla.
+        Busca un equipo directamente por su nombre para resolver su ID real en API-Football.
         """
         norm_query = normalizar(nombre_equipo)
         res = self.consultar("teams", {"search": norm_query})
         if not res:
-            # Reintento con consulta directa si la normalización removió palabras clave
             res = self.consultar("teams", {"search": nombre_equipo})
 
         if res:
@@ -58,8 +57,8 @@ class FootballAPI:
 
     def buscar_partido_por_equipos(self, local: str, visitante: str, fecha: str):
         """
-        Busca el partido por fecha y equipos. Si no lo encuentra por fecha exacta,
-        resuelve los IDs reales de ambos equipos para extraer sus datos estadísticos reales.
+        Busca el partido por fecha. Si la fecha falla, resuelve los IDs reales de ambos clubes
+        para extraer sus datos históricos auténticos sin caer en valores por defecto.
         """
         partidos = self.buscar_partido(fecha)
         norm_loc = normalizar(local)
@@ -84,8 +83,7 @@ class FootballAPI:
             if mejor_match:
                 return mejor_match
 
-        # RESPALDO INTELIGENTE: Si no se encuentra el fixture en la fecha dada,
-        # se obtienen los IDs reales de ambos clubes para analizar sus estadísticas reales.
+        # Respaldo activo por IDs de equipos
         eq_loc = self.buscar_equipo_por_nombre(local)
         eq_vis = self.buscar_equipo_por_nombre(visitante)
 
@@ -129,6 +127,14 @@ class FootballAPI:
         if not fixture_id:
             return []
         return self.consultar("fixtures/statistics", {"fixture": fixture_id})
+
+    def obtener_alineaciones(self, fixture_id: int) -> list:
+        """
+        Consulta las alineaciones oficiales de un encuentro (/fixtures/lineups).
+        """
+        if not fixture_id:
+            return []
+        return self.consultar("fixtures/lineups", {"fixture": fixture_id})
 
     def obtener_ligas(self) -> list:
         return self.consultar("leagues", {"current": "true"})
