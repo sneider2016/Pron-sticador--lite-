@@ -32,7 +32,13 @@ class SALMEngine:
             fortaleza_off_h=analisis["fortaleza_ofensiva_h"],
             fortaleza_def_h=analisis["fortaleza_defensiva_h"],
             fortaleza_off_v=analisis["fortaleza_ofensiva_v"],
-            fortaleza_def_v=analisis["fortaleza_defensiva_v"]
+            fortaleza_def_v=analisis["fortaleza_defensiva_v"],
+            elo_h=analisis["elo_h"],
+            elo_v=analisis["elo_v"],
+            xg_h=analisis["xg_h"],
+            xg_v=analisis["xg_v"],
+            fuerza_rival_h=analisis["fuerza_rival_h"],
+            fuerza_rival_v=analisis["fuerza_rival_v"]
         )
 
         mercados_mapeo = [
@@ -63,7 +69,7 @@ class SALMEngine:
 
     def ejecutar_analisis_completo(self, local: str, visitante: str, fecha: str, liga: str) -> Match:
         """
-        Ejecuta el pipeline profesional IA SALM y genera un objeto Match completo.
+        Ejecuta la fusión completa del Modelo Poisson-Dixon-Coles + Monte Carlo (IA SALM).
         """
         fix = self.api.buscar_partido_por_equipos(local, visitante, fecha)
 
@@ -97,7 +103,13 @@ class SALMEngine:
             fortaleza_off_h=analisis_raw["fortaleza_ofensiva_h"],
             fortaleza_def_h=analisis_raw["fortaleza_defensiva_h"],
             fortaleza_off_v=analisis_raw["fortaleza_ofensiva_v"],
-            fortaleza_def_v=analisis_raw["fortaleza_defensiva_v"]
+            fortaleza_def_v=analisis_raw["fortaleza_defensiva_v"],
+            elo_h=analisis_raw["elo_h"],
+            elo_v=analisis_raw["elo_v"],
+            xg_h=analisis_raw["xg_h"],
+            xg_v=analisis_raw["xg_v"],
+            fuerza_rival_h=analisis_raw["fuerza_rival_h"],
+            fuerza_rival_v=analisis_raw["fuerza_rival_v"]
         )
 
         pf_h = analisis_raw["ataque_local"]
@@ -119,7 +131,7 @@ class SALMEngine:
                 "m": "Más de 7.5 Tiros de Esquina (Córneres Totales)",
                 "p": 84.0,
                 "r": "Bajo",
-                "razon": f"Proyección ofensiva combinada de {corners_est:.1f} tiros de esquina por juego."
+                "razon": f"Proyección ofensiva combinada de {corners_est:.1f} córneres/juego."
             })
 
         if tarjetas_est >= 4.5:
@@ -127,7 +139,7 @@ class SALMEngine:
                 "m": "Más de 3.5 Tarjetas Totales en el Partido",
                 "p": 82.0,
                 "r": "Bajo",
-                "razon": f"Partido de alta fricción táctica en {liga} (promedio de {tarjetas_est} tarjetas)."
+                "razon": f"Fricción táctica estimada en {liga} (promedio de {tarjetas_est} tarjetas)."
             })
 
         if probs["btts"] >= 58.0 and analisis_raw["h2h_btts"] >= 3:
@@ -135,7 +147,7 @@ class SALMEngine:
                 "m": "Ambos Equipos Anotan (Sí)",
                 "p": probs["btts"],
                 "r": "Bajo-Medio",
-                "razon": f"Ambos anotaron en {analisis_raw['h2h_btts']} de sus últimos H2H y alta conversión reciente."
+                "razon": f"Ambos anotaron en {analisis_raw['h2h_btts']} H2H recientes e índice BTTS de {probs['btts']}%. "
             })
 
         if exp_g <= 2.10 and prom_h2h <= 2.2:
@@ -143,7 +155,7 @@ class SALMEngine:
                 "m": "Menos de 2.5 Goles Totales (Under 2.5)",
                 "p": probs["under25"],
                 "r": "Bajo",
-                "razon": f"Baja expectativa de gol en Poisson ({exp_g:.2f}). Bloques defensivos ordenados."
+                "razon": f"Expectativa baja en Monte Carlo ({exp_g:.2f} goles) y bloques defensivos compactos."
             })
 
         if exp_g >= 2.40 and probs["over15"] >= 75.0:
@@ -151,7 +163,7 @@ class SALMEngine:
                 "m": "Más de 1.5 Goles Totales en el Partido",
                 "p": probs["over15"],
                 "r": "Bajo",
-                "razon": f"Ataques fluidos con proyección Poisson de {exp_g:.2f} goles e índice de gol eficiente."
+                "razon": f"Proyección híbrida de {exp_g:.2f} goles con tasa Over 1.5 del {probs['over15']}%."
             })
 
         if probs["local"] >= 52.0:
@@ -159,14 +171,14 @@ class SALMEngine:
                 "m": f"Gana {loc_name} Sin Empate (Empate No Válido)",
                 "p": probs["dnb_local"],
                 "r": "Bajo",
-                "razon": f"Dominio local con {probs['local']}% de probabilidad directa y sólida fortaleza en casa."
+                "razon": f"Dominio local con {probs['local']}% de probabilidad directa y ventaja ELO."
             })
         elif probs["visitante"] >= 42.0:
             candidatos.append({
                 "m": f"Gana {vis_name} Sin Empate (Empate No Válido)",
                 "p": probs["dnb_visitante"],
                 "r": "Bajo-Medio",
-                "razon": f"Métricas superiores del visitante ({pf_v:.1f} GF/partido) y buen rendimiento fuera de casa."
+                "razon": f"Métricas superiores del visitante ({pf_v:.1f} GF/juego) y ajuste por fuerza rival."
             })
 
         if not candidatos:
@@ -192,9 +204,10 @@ class SALMEngine:
         s_top = candidatos[1] if len(candidatos) > 1 else candidatos[0]
 
         arg = (
-            f"**1. Desempeño:** {loc_name} ({pf_h:.1f} GF / {pc_h:.1f} GC) vs {vis_name} ({pf_v:.1f} GF / {pc_v:.1f} GC).\n\n"
-            f"**2. Expectativa Gol (Poisson):** Proyección local: {l_h:.2f} | Visita: {l_v:.2f} (Total: {exp_g:.2f}).\n\n"
-            f"**3. Historial H2H:** Promedio de {prom_h2h:.1f} goles en sus últimos duelos.\n\n"
+            f"**1. Rendimiento Ajustado (Fuerza Rival):** {loc_name} ({pf_h:.1f} GF / {pc_h:.1f} GC | Rival S_opp: {analisis_raw['fuerza_rival_h']:.2f}) vs "
+            f"{vis_name} ({pf_v:.1f} GF / {pc_v:.1f} GC | Rival S_opp: {analisis_raw['fuerza_rival_v']:.2f}).\n\n"
+            f"**2. Expectativa Gol (Dixon-Coles + Monte Carlo 10k):** Proyección local: {l_h:.2f} | Visita: {l_v:.2f} (Total: {exp_g:.2f} | xG: {analisis_raw['xg_h']:.2f} vs {analisis_raw['xg_v']:.2f}).\n\n"
+            f"**3. Contexto Táctico & H2H:** Promedio H2H {prom_h2h:.1f} goles | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
             f"**4. Dictamen Multimercado:** {p_top['razon']}"
         )
 
@@ -216,4 +229,4 @@ class SALMEngine:
             confidence=probs["confianza"],
             risk=p_top["r"],
             explanation=arg
-            )
+            ) 
