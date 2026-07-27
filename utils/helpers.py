@@ -8,9 +8,9 @@ def normalizar(t: str) -> str:
     if not t:
         return ""
     t = unicodedata.normalize("NFD", t).encode("ascii", "ignore").decode("utf-8").lower()
-    basura = ["fc", "cd", "club", "sd", "ca", "s.a.", "deportivo", "atletico", "f.c.", "c.d."]
+    basura = ["fc", "cd", "club", "sd", "ca", "s.a.", "deportivo", "atletico", "f.c.", "c.d.", "real"]
     palabras = [p for p in t.split() if p not in basura]
-    return " ".join(palabras).strip()
+    return " ".join(palabras).strip() if palabras else t.strip().lower()
 
 
 def porcentaje(valor: float) -> str:
