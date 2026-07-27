@@ -404,4 +404,4 @@ if st.session_state.get("analizado", False):
     st.divider()
     if st.button("🔄 Analizar Otro Partido", key="btn_bot"):
         st.session_state.clear()
-        sDeportivo
+        st.rerun()
