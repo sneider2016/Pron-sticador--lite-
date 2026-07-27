@@ -5,10 +5,10 @@ from typing import Dict, List, Optional
 
 try:
     from rapidfuzz import fuzz
-    def calcular_similitud(s1: str, s2: str) -> float: return fuzz.ratio(s1, s2)
+    def similarity(s1: str, s2: str) -> float: return fuzz.ratio(s1, s2)
 except ImportError:
     from difflib import SequenceMatcher
-    def calcular_similitud(s1: str, s2: str) -> float: return SequenceMatcher(None, s1, s2).ratio() * 100.0
+    def similarity(s1: str, s2: str) -> float: return SequenceMatcher(None, s1, s2).ratio() * 100.0
 
 API_KEY, HOST, APP_NAME = "3e69e51ac95c094a672f790edac978b0", "v3.football.api-sports.io", "Pronósticador Élite Profesional"
 
@@ -41,16 +41,33 @@ class Match:
 class FootballAPI:
     def __init__(self):
         self.headers = {"x-rapidapi-host": HOST, "x-rapidapi-key": API_KEY, "x-apisports-key": API_KEY}
+        self.ultimo_error = ""
 
     def consultar(self, endpoint: str, params: dict) -> list:
         try:
             r = requests.get(f"https://{HOST}/{endpoint}", headers=self.headers, params=params, timeout=10)
-            return r.json().get("response", []) if r.status_code == 200 else []
-        except Exception: return []
+            if r.status_code == 200:
+                data = r.json()
+                errs = data.get("errors")
+                if errs and isinstance(errs, dict) and len(errs) > 0:
+                    msg = str(errs)
+                    if "requests" in msg.lower() or "limit" in msg.lower():
+                        self.ultimo_error = "🛑 Límite de consultas alcanzado: Has agotado el cupo gratuito diario de 100 peticiones de tu API Key."
+                    else:
+                        self.ultimo_error = f"⚠️ Error en API-Football: {msg}"
+                    return []
+                return data.get("response", [])
+        except Exception as e:
+            self.ultimo_error = f"⚠️ Error de conexión con API-Football: {str(e)}"
+        return []
 
     def buscar_equipo(self, nombre: str) -> dict:
         clean = limpiar_nombre(nombre)
-        for q in [clean, nombre, clean.split()[0] if len(clean.split()) > 1 else ""]:
+        intentos = [clean, nombre, f"CA {clean}", f"Club {clean}"]
+        palabras = clean.split()
+        if len(palabras) > 1: intentos.append(palabras[0])
+
+        for q in intentos:
             if not q or len(q) < 3: continue
             res = self.consultar("teams", {"search": q})
             if res:
@@ -63,8 +80,10 @@ class FootballAPI:
         return None
 
     def buscar_partido(self, local: str, visitante: str, fecha: str):
+        self.ultimo_error = ""
         partidos = self.consultar("fixtures", {"date": fecha})
         norm_l, norm_v = normalizar(local), normalizar(visitante)
+
         if partidos:
             mejor, max_s = None, 0
             for p in partidos:
@@ -108,7 +127,9 @@ class Analyzer:
         gf_h, gc_h, ok_h = calc_gf_gc(l_h, h_id)
         gf_v, gc_v, ok_v = calc_gf_gc(l_v, v_id)
 
-        if not ok_h or not ok_v: return {"ok": False}
+        if not ok_h or not ok_v:
+            err_msg = self.api.ultimo_error if self.api.ultimo_error else "No se encontraron partidos para estos equipos en API-Football."
+            return {"ok": False, "error_api": err_msg}
 
         h2h = self.api.h2h(h_id, v_id)
         tot_h2h = sum((m.get("goals", {}).get("home") or 0) + (m.get("goals", {}).get("away") or 0) for m in h2h) if h2h else 0.0
@@ -120,15 +141,13 @@ class ProbabilityCalculator:
     def __poisson(self, k: int, lam: float) -> float:
         return (math.pow(lam, k) * math.exp(-lam)) / math.factorial(k) if lam > 0 else (1.0 if k == 0 else 0.0)
 
-    def calcular(self, ataque_local: float, defensa_local: float, ataque_visitante: float, defensa_visitante: float) -> dict:
-        lambda_h = max(0.20, (ataque_local + defensa_visitante) / 2.0)
-        lambda_v = max(0.20, (ataque_visitante + defensa_local) / 2.0)
-
+    def calcular(self, gf_h, gc_h, gf_v, gc_v):
+        lh, lv = max(0.20, (gf_h + gc_v) / 2.0), max(0.20, (gf_v + gc_h) / 2.0)
         ph, pd, pv, pu15, po15, pu25, po25, pu35, pbtts = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 
         for i in range(8):
             for j in range(8):
-                p = self.__poisson(i, lambda_h) * self.__poisson(j, lambda_v)
+                p = self.__poisson(i, lh) * self.__poisson(j, lv)
                 if i > j: ph += p
                 elif i == j: pd += p
                 else: pv += p
@@ -144,7 +163,7 @@ class ProbabilityCalculator:
         ph, pd, pv = ph/tot_p, pd/tot_p, pv/tot_p
 
         return {
-            "lh": round(lambda_h, 2), "lv": round(lambda_v, 2), "exp": round(lambda_h + lambda_v, 2),
+            "lh": round(lh, 2), "lv": round(lv, 2), "exp": round(lh + lv, 2),
             "local": round(ph * 100.0, 1), "empate": round(pd * 100.0, 1), "visitante": round(pv * 100.0, 1),
             "1x": round((ph + pd) * 100.0, 1), "x2": round((pv + pd) * 100.0, 1),
             "dnb_h": round((ph / max(0.001, ph + pv)) * 100.0, 1),
@@ -166,12 +185,13 @@ class SALMEngine:
 
         an = self.analyzer.analizar({"home_id": h_id, "away_id": v_id})
         if not an.get("ok"):
+            err_text = an.get("error_api", "No se hallaron partidos en API-Football.")
             return Match(
                 local=loc_n, visitante=vis_n,
-                main_prediction="🛑 SIN DATOS REALES EN API-FOOTBALL",
-                market_ranking=[{"m": "Sin datos", "p": 0.0, "c": 999.0, "r": "Alto", "razon": "No se obtuvieron partidos de la API."}],
-                explanation=f"**Atención:** No fue posible obtener el historial de partidos reales para **{local}** o **{visitante}** desde API-Football.\n\n💡 **Sugerencia:** Escribe solo el nombre principal (ej. 'Nacional' o 'Tigre').",
-                alerts=[f"🛑 API Error: No se halló historial para '{local}' o '{visitante}'."]
+                main_prediction="🛑 PRONÓSTICO SUSPENDIDO POR API",
+                market_ranking=[{"m": "Sin datos", "p": 0.0, "c": 999.0, "r": "Alto", "razon": err_text}],
+                explanation=f"**Atención:** {err_text}\n\n💡 **Sugerencia:** Si es un problema de límite, crea una API Key gratuita nueva en api-sports.io o espera al cambio de día.",
+                alerts=[err_text]
             )
 
         pr = self.prob.calcular(an["gf_h"], an["gc_h"], an["gf_v"], an["gc_v"])
