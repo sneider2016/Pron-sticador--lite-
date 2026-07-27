@@ -1,7 +1,7 @@
 import requests
 from rapidfuzz import fuzz
 from config import API_KEY, HOST
-from utils.helpers import normalizar
+from utils.helpers import normalizar, limpiar_nombre_busqueda
 
 
 class FootballAPI:
@@ -12,6 +12,7 @@ class FootballAPI:
             "x-rapidapi-key": API_KEY,
             "x-apisports-key": API_KEY
         }
+        self.ultimo_error = ""
 
     def consultar(self, endpoint: str, parametros: dict) -> list:
         url = f"https://{HOST}/{endpoint}"
@@ -23,9 +24,13 @@ class FootballAPI:
                 timeout=10
             )
             if respuesta.status_code == 200:
-                return respuesta.json().get("response", [])
-        except Exception:
-            pass
+                data = respuesta.json()
+                errors = data.get("errors")
+                if errors and isinstance(errors, dict) and len(errors) > 0:
+                    self.ultimo_error = str(errors)
+                return data.get("response", [])
+        except Exception as e:
+            self.ultimo_error = str(e)
         return []
 
     def buscar_partido(self, fecha: str) -> list:
@@ -33,32 +38,43 @@ class FootballAPI:
 
     def buscar_equipo_por_nombre(self, nombre_equipo: str) -> dict:
         """
-        Busca un equipo directamente por su nombre para resolver su ID real en API-Football.
+        Busca un equipo en API-Football limpiando los sufijos de país que rompen la API.
+        Ejemplo: 'Tigre de argentina' -> consulta 'Tigre' y encuentra C.A. Tigre oficial.
         """
-        norm_query = normalizar(nombre_equipo)
-        res = self.consultar("teams", {"search": norm_query})
-        if not res:
-            res = self.consultar("teams", {"search": nombre_equipo})
+        nombre_limpio = limpiar_nombre_busqueda(nombre_equipo)
+        
+        intentos = [nombre_limpio, nombre_equipo]
+        palabras = nombre_limpio.split()
+        if len(palabras) > 1:
+            intentos.append(palabras[0])
 
-        if res:
-            mejor_eq = None
-            max_s = 0
-            for item in res:
-                t_name = item.get("team", {}).get("name", "")
-                score = fuzz.ratio(norm_query, normalizar(t_name))
-                if score > max_s:
-                    max_s = score
-                    mejor_eq = item.get("team")
-            if mejor_eq and max_s >= 40:
-                return mejor_eq
-            elif res:
-                return res[0].get("team")
+        for query in intentos:
+            if not query or len(query) < 3:
+                continue
+            res = self.consultar("teams", {"search": query})
+            if res:
+                mejor_eq = None
+                max_s = 0
+                query_norm = normalizar(query)
+                for item in res:
+                    t_info = item.get("team", {})
+                    t_name = t_info.get("name", "")
+                    score = fuzz.ratio(query_norm, normalizar(t_name))
+                    if score > max_s:
+                        max_s = score
+                        mejor_eq = t_info
+
+                if mejor_eq:
+                    return mejor_eq
+                elif res:
+                    return res[0].get("team")
+
         return None
 
     def buscar_partido_por_equipos(self, local: str, visitante: str, fecha: str):
         """
-        Busca el partido por fecha. Si la fecha falla, resuelve los IDs reales de ambos clubes
-        para extraer sus datos históricos auténticos sin caer en valores por defecto.
+        Busca el partido por fecha. Si la fecha no coincide exactamente, resuelve
+        los IDs reales de ambos equipos para extraer sus datos históricos auténticos.
         """
         partidos = self.buscar_partido(fecha)
         norm_loc = normalizar(local)
@@ -83,26 +99,25 @@ class FootballAPI:
             if mejor_match:
                 return mejor_match
 
-        # Respaldo activo por IDs de equipos
+        # Buscador inteligente por nombre limpio
         eq_loc = self.buscar_equipo_por_nombre(local)
         eq_vis = self.buscar_equipo_por_nombre(visitante)
 
-        if eq_loc or eq_vis:
-            h_id = eq_loc.get("id") if eq_loc else 0
-            h_name = eq_loc.get("name") if eq_loc else local
-            v_id = eq_vis.get("id") if eq_vis else 0
-            v_name = eq_vis.get("name") if eq_vis else visitante
+        h_id = eq_loc.get("id") if eq_loc else 0
+        h_name = eq_loc.get("name") if eq_loc else local
+        v_id = eq_vis.get("id") if eq_vis else 0
+        v_name = eq_vis.get("name") if eq_vis else visitante
 
-            return {
-                "fixture": {"id": 0},
-                "league": {"id": 0, "season": 2026},
-                "teams": {
-                    "home": {"id": h_id, "name": h_name},
-                    "away": {"id": v_id, "name": v_name}
-                }
-            }
-
-        return None
+        return {
+            "fixture": {"id": 0},
+            "league": {"id": 0, "season": 2026},
+            "teams": {
+                "home": {"id": h_id, "name": h_name},
+                "away": {"id": v_id, "name": v_name}
+            },
+            "encontrado_loc": eq_loc is not None,
+            "encontrado_vis": eq_vis is not None
+        }
 
     def ultimos_partidos(self, team_id: int, cantidad: int = 10) -> list:
         if not team_id:
@@ -129,9 +144,6 @@ class FootballAPI:
         return self.consultar("fixtures/statistics", {"fixture": fixture_id})
 
     def obtener_alineaciones(self, fixture_id: int) -> list:
-        """
-        Consulta las alineaciones oficiales de un encuentro (/fixtures/lineups).
-        """
         if not fixture_id:
             return []
         return self.consultar("fixtures/lineups", {"fixture": fixture_id})
