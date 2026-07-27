@@ -15,7 +15,7 @@ class SALMEngine:
 
     def analizar(self, datos_partido: dict) -> list:
         """
-        Método de análisis rápido por lote de mercados.
+        Análisis rápido por lote de mercados.
         """
         analisis = self.analyzer.analizar(datos_partido)
         probs = self.probability.calcular(
@@ -25,6 +25,14 @@ class SALMEngine:
             defensa_visitante=analisis["defensa_visitante"],
             forma_local=analisis["forma_local"],
             forma_visitante=analisis["forma_visitante"],
+            descanso_h=analisis["descanso_h"],
+            descanso_v=analisis["descanso_v"],
+            lesiones_h=analisis["lesiones_h_cnt"],
+            lesiones_v=analisis["lesiones_v_cnt"],
+            fortaleza_off_h=analisis["fortaleza_ofensiva_h"],
+            fortaleza_def_h=analisis["fortaleza_defensiva_h"],
+            fortaleza_off_v=analisis["fortaleza_ofensiva_v"],
+            fortaleza_def_v=analisis["fortaleza_defensiva_v"]
         )
 
         mercados_mapeo = [
@@ -55,7 +63,7 @@ class SALMEngine:
 
     def ejecutar_analisis_completo(self, local: str, visitante: str, fecha: str, liga: str) -> Match:
         """
-        Ejecuta el pipeline completo IA SALM y genera un objeto Match.
+        Ejecuta el pipeline profesional IA SALM y genera un objeto Match completo.
         """
         fix = self.api.buscar_partido_por_equipos(local, visitante, fecha)
 
@@ -68,6 +76,9 @@ class SALMEngine:
         datos_partido = {
             "home_id": h_id,
             "away_id": v_id,
+            "fixture_id": fix["fixture"]["id"] if fix else 0,
+            "league_id": fix["league"]["id"] if fix else 0,
+            "season": fix["league"]["season"] if fix else 2024,
             "liga": liga
         }
 
@@ -79,6 +90,14 @@ class SALMEngine:
             defensa_visitante=analisis_raw["defensa_visitante"],
             forma_local=analisis_raw["forma_local"],
             forma_visitante=analisis_raw["forma_visitante"],
+            descanso_h=analisis_raw["descanso_h"],
+            descanso_v=analisis_raw["descanso_v"],
+            lesiones_h=analisis_raw["lesiones_h_cnt"],
+            lesiones_v=analisis_raw["lesiones_v_cnt"],
+            fortaleza_off_h=analisis_raw["fortaleza_ofensiva_h"],
+            fortaleza_def_h=analisis_raw["fortaleza_defensiva_h"],
+            fortaleza_off_v=analisis_raw["fortaleza_ofensiva_v"],
+            fortaleza_def_v=analisis_raw["fortaleza_defensiva_v"]
         )
 
         pf_h = analisis_raw["ataque_local"]
@@ -100,7 +119,7 @@ class SALMEngine:
                 "m": "Más de 7.5 Tiros de Esquina (Córneres Totales)",
                 "p": 84.0,
                 "r": "Bajo",
-                "razon": f"Proyección ofensiva de {corners_est:.1f} tiros de esquina."
+                "razon": f"Proyección ofensiva combinada de {corners_est:.1f} tiros de esquina por juego."
             })
 
         if tarjetas_est >= 4.5:
@@ -108,7 +127,7 @@ class SALMEngine:
                 "m": "Más de 3.5 Tarjetas Totales en el Partido",
                 "p": 82.0,
                 "r": "Bajo",
-                "razon": f"Partido de alta fricción en {liga} ({tarjetas_est} tarjetas prom)."
+                "razon": f"Partido de alta fricción táctica en {liga} (promedio de {tarjetas_est} tarjetas)."
             })
 
         if probs["btts"] >= 58.0 and analisis_raw["h2h_btts"] >= 3:
@@ -116,7 +135,7 @@ class SALMEngine:
                 "m": "Ambos Equipos Anotan (Sí)",
                 "p": probs["btts"],
                 "r": "Bajo-Medio",
-                "razon": f"Ambos anotaron en {analisis_raw['h2h_btts']} de los últimos H2H."
+                "razon": f"Ambos anotaron en {analisis_raw['h2h_btts']} de sus últimos H2H y alta conversión reciente."
             })
 
         if exp_g <= 2.10 and prom_h2h <= 2.2:
@@ -124,15 +143,15 @@ class SALMEngine:
                 "m": "Menos de 2.5 Goles Totales (Under 2.5)",
                 "p": probs["under25"],
                 "r": "Bajo",
-                "razon": f"Baja expectativa de gol ({exp_g:.2f}). Bloques defensivos marcados."
+                "razon": f"Baja expectativa de gol en Poisson ({exp_g:.2f}). Bloques defensivos ordenados."
             })
 
-        if exp_g >= 2.4 and probs["over15"] >= 75.0:
+        if exp_g >= 2.40 and probs["over15"] >= 75.0:
             candidatos.append({
                 "m": "Más de 1.5 Goles Totales en el Partido",
                 "p": probs["over15"],
                 "r": "Bajo",
-                "razon": f"Ataques fluidos con proyección de {exp_g:.2f} goles."
+                "razon": f"Ataques fluidos con proyección Poisson de {exp_g:.2f} goles e índice de gol eficiente."
             })
 
         if probs["local"] >= 52.0:
@@ -140,19 +159,19 @@ class SALMEngine:
                 "m": f"Gana {loc_name} Sin Empate (Empate No Válido)",
                 "p": probs["dnb_local"],
                 "r": "Bajo",
-                "razon": f"Dominio local con {probs['local']}% prob victoria directa."
+                "razon": f"Dominio local con {probs['local']}% de probabilidad directa y sólida fortaleza en casa."
             })
         elif probs["visitante"] >= 42.0:
             candidatos.append({
                 "m": f"Gana {vis_name} Sin Empate (Empate No Válido)",
                 "p": probs["dnb_visitante"],
                 "r": "Bajo-Medio",
-                "razon": f"Métricas superiores del visitante ({pf_v:.1f} goles/juego)."
+                "razon": f"Métricas superiores del visitante ({pf_v:.1f} GF/partido) y buen rendimiento fuera de casa."
             })
 
         if not candidatos:
             candidatos.append({
-                "m": f"Gana o Empata {loc_name} (Doble Chance 1X)",
+                "m": f"Gana o Empata {loc_name} (Doble Oportunidad 1X)",
                 "p": probs["doble_chance_1x"],
                 "r": "Bajo",
                 "razon": "Ventaja de localía y cobertura frente a empate."
@@ -197,4 +216,4 @@ class SALMEngine:
             confidence=probs["confianza"],
             risk=p_top["r"],
             explanation=arg
-        )
+            )
