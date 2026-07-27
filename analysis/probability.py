@@ -14,11 +14,30 @@ class ProbabilityCalculator:
         defensa_visitante: float,
         forma_local: float = 50.0,
         forma_visitante: float = 50.0,
+        descanso_h: int = 6,
+        descanso_v: int = 6,
+        lesiones_h: int = 0,
+        lesiones_v: int = 0,
+        fortaleza_off_h: float = 1.0,
+        fortaleza_def_h: float = 1.0,
+        fortaleza_off_v: float = 1.0,
+        fortaleza_def_v: float = 1.0,
     ) -> dict:
 
-        # Intensidad esperada de gol con umbral de seguridad mínimo
-        lambda_local = max(0.20, (ataque_local + defensa_visitante) / 2.0)
-        lambda_visitante = max(0.20, (ataque_visitante + defensa_local) / 2.0)
+        base_lambda_local = (ataque_local + defensa_visitante) / 2.0
+        base_lambda_visitante = (ataque_visitante + defensa_local) / 2.0
+
+        factor_fuerza_h = (fortaleza_off_h * (2.0 - min(1.8, fortaleza_def_v)))
+        factor_fuerza_v = (fortaleza_off_v * (2.0 - min(1.8, fortaleza_def_h)))
+
+        fatiga_h = 0.90 if descanso_h < 3 else (1.05 if descanso_h >= 6 else 1.0)
+        fatiga_v = 0.90 if descanso_v < 3 else (1.05 if descanso_v >= 6 else 1.0)
+
+        bajas_h = max(0.85, 1.0 - (lesiones_h * 0.03))
+        bajas_v = max(0.85, 1.0 - (lesiones_v * 0.03))
+
+        lambda_local = max(0.20, base_lambda_local * factor_fuerza_h * fatiga_h * bajas_h)
+        lambda_visitante = max(0.20, base_lambda_visitante * factor_fuerza_v * fatiga_v * bajas_v)
 
         p_local = 0.0
         p_empate = 0.0
@@ -30,8 +49,8 @@ class ProbabilityCalculator:
         p_under35 = 0.0
         p_over35 = 0.0
 
-        for i in range(6):
-            for j in range(6):
+        for i in range(8):
+            for j in range(8):
                 p = self.__poisson(i, lambda_local) * self.__poisson(j, lambda_visitante)
 
                 if i > j:
@@ -66,10 +85,9 @@ class ProbabilityCalculator:
 
         exp_goles = lambda_local + lambda_visitante
 
-        # Ponderación por forma reciente de los equipos
         forma_factor = (forma_local + forma_visitante) / 200.0
         confianza = max(p_local, p_empate, p_visitante, p_under25, p_over15, p_btts) * 100.0
-        confianza = max(50.0, min(95.0, confianza * (0.90 + (forma_factor * 0.10))))
+        confianza = max(55.0, min(95.0, confianza * (0.88 + (forma_factor * 0.12))))
 
         return {
             "lambda_local": round(lambda_local, 2),
