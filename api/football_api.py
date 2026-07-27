@@ -31,30 +31,80 @@ class FootballAPI:
     def buscar_partido(self, fecha: str) -> list:
         return self.consultar("fixtures", {"date": fecha})
 
+    def buscar_equipo_por_nombre(self, nombre_equipo: str) -> dict:
+        """
+        Busca directamente un equipo por nombre para obtener su ID real si la fecha falla.
+        """
+        norm_query = normalizar(nombre_equipo)
+        res = self.consultar("teams", {"search": norm_query})
+        if not res:
+            # Reintento con consulta directa si la normalización removió palabras clave
+            res = self.consultar("teams", {"search": nombre_equipo})
+
+        if res:
+            mejor_eq = None
+            max_s = 0
+            for item in res:
+                t_name = item.get("team", {}).get("name", "")
+                score = fuzz.ratio(norm_query, normalizar(t_name))
+                if score > max_s:
+                    max_s = score
+                    mejor_eq = item.get("team")
+            if mejor_eq and max_s >= 40:
+                return mejor_eq
+            elif res:
+                return res[0].get("team")
+        return None
+
     def buscar_partido_por_equipos(self, local: str, visitante: str, fecha: str):
+        """
+        Busca el partido por fecha y equipos. Si no lo encuentra por fecha exacta,
+        resuelve los IDs reales de ambos equipos para extraer sus datos estadísticos reales.
+        """
         partidos = self.buscar_partido(fecha)
-        if not partidos:
-            return None
-
-        mejor_match = None
-        max_score = 0
-
         norm_loc = normalizar(local)
         norm_vis = normalizar(visitante)
 
-        for p in partidos:
-            l_api = p.get("teams", {}).get("home", {}).get("name", "")
-            v_api = p.get("teams", {}).get("away", {}).get("name", "")
+        if partidos:
+            mejor_match = None
+            max_score = 0
 
-            s1 = fuzz.ratio(norm_loc, normalizar(l_api))
-            s2 = fuzz.ratio(norm_vis, normalizar(v_api))
-            score = (s1 + s2) / 2.0
+            for p in partidos:
+                l_api = p.get("teams", {}).get("home", {}).get("name", "")
+                v_api = p.get("teams", {}).get("away", {}).get("name", "")
 
-            if score > 40 and score > max_score:
-                max_score = score
-                mejor_match = p
+                s1 = fuzz.ratio(norm_loc, normalizar(l_api))
+                s2 = fuzz.ratio(norm_vis, normalizar(v_api))
+                score = (s1 + s2) / 2.0
 
-        return mejor_match
+                if score > 40 and score > max_score:
+                    max_score = score
+                    mejor_match = p
+
+            if mejor_match:
+                return mejor_match
+
+        # RESPALDO INTELIGENTE: Si no se encuentra el fixture en la fecha dada,
+        # se obtienen los IDs reales de ambos clubes para analizar sus estadísticas reales.
+        eq_loc = self.buscar_equipo_por_nombre(local)
+        eq_vis = self.buscar_equipo_por_nombre(visitante)
+
+        if eq_loc or eq_vis:
+            h_id = eq_loc.get("id") if eq_loc else 0
+            h_name = eq_loc.get("name") if eq_loc else local
+            v_id = eq_vis.get("id") if eq_vis else 0
+            v_name = eq_vis.get("name") if eq_vis else visitante
+
+            return {
+                "fixture": {"id": 0},
+                "league": {"id": 0, "season": 2026},
+                "teams": {
+                    "home": {"id": h_id, "name": h_name},
+                    "away": {"id": v_id, "name": v_name}
+                }
+            }
+
+        return None
 
     def ultimos_partidos(self, team_id: int, cantidad: int = 10) -> list:
         if not team_id:
