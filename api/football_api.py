@@ -50,18 +50,24 @@ class FootballAPI:
             s2 = fuzz.ratio(norm_vis, normalizar(v_api))
             score = (s1 + s2) / 2.0
 
-            if score > 45 and score > max_score:
+            if score > 40 and score > max_score:
                 max_score = score
                 mejor_match = p
 
         return mejor_match
 
-    def ultimos_partidos(self, team_id: int, cantidad: int = 5) -> list:
+    def ultimos_partidos(self, team_id: int, cantidad: int = 10) -> list:
         if not team_id:
             return []
         return self.consultar("fixtures", {"team": team_id, "last": cantidad})
 
-    def head_to_head(self, local_id: int, visitante_id: int, cantidad: int = 5) -> list:
+    def ultimos_partidos_condicion(self, team_id: int, es_local: bool, cantidad: int = 5) -> list:
+        if not team_id:
+            return []
+        param = {"team": team_id, "last": cantidad, "venue": "home" if es_local else "away"}
+        return self.consultar("fixtures", param)
+
+    def head_to_head(self, local_id: int, visitante_id: int, cantidad: int = 10) -> list:
         if not local_id or not visitante_id:
             return []
         return self.consultar(
@@ -87,13 +93,19 @@ class FootballAPI:
         )
 
     def obtener_clasificacion(self, league_id: int, season: int) -> list:
+        if not league_id or not season:
+            return []
         return self.consultar(
             "standings",
             {"league": league_id, "season": season}
         )
 
-    def obtener_lesiones(self, league_id: int, season: int) -> list:
-        return self.consultar(
-            "injuries",
-            {"league": league_id, "season": season}
-        )
+    def obtener_lesiones(self, fixture_id: int = None, team_id: int = None) -> list:
+        params = {}
+        if fixture_id:
+            params["fixture"] = fixture_id
+        elif team_id:
+            params["team"] = team_id
+        else:
+            return []
+        return self.consultar("injuries", params)
