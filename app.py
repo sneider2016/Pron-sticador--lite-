@@ -477,4 +477,4 @@ if st.session_state.get("analizado", False):
             else:
                 st.success(f"DECISIÓN: {eval_res['decision']}\n\n**Ventaja +EV:** +{eval_res['ev_porcentaje']}%\n\n**Kelly Stake:** {eval_res['kelly_stake_pct']}% Bankroll")
 
-st.
+st. 
