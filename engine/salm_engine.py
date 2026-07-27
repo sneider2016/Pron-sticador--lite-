@@ -211,7 +211,6 @@ class SALMEngine:
                 "razon": f"Fricción táctica y arbitraje esperado en {liga} ({tarjetas_est:.1f} tarjetas est.)."
             })
 
-        # Ordenar candidatos de mayor a menor probabilidad real
         todos_mercados.sort(key=lambda x: x["p"], reverse=True)
 
         for cand in todos_mercados:
@@ -223,10 +222,14 @@ class SALMEngine:
         arg = (
             f"**1. Rendimiento Real:** {loc_name} ({pf_h:.1f} GF / {pc_h:.1f} GC | Rival S_opp: {analisis_raw['fuerza_rival_h']:.2f}) vs "
             f"{vis_name} ({pf_v:.1f} GF / {pc_v:.1f} GC | Rival S_opp: {analisis_raw['fuerza_rival_v']:.2f}).\n\n"
-            f"**2. Proyección Poisson + Monte Carlo (10k):** Gol Local: {l_h:.2f} | Gol Visita: {l_v:.2f} (Total: {exp_g:.2f} | xG: {analisis_raw['xg_h']:.2f} vs {analisis_raw['xg_v']:.2f}).\n\n"
+            f"**2. Proyección Poisson Bivariada + Monte Carlo:** Gol Local: {l_h:.2f} | Gol Visita: {l_v:.2f} (Total: {exp_g:.2f} | xG: {analisis_raw['xg_h']:.2f} vs {analisis_raw['xg_v']:.2f}).\n\n"
             f"**3. Contexto Táctico & H2H:** Promedio H2H {prom_h2h:.1f} goles | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
             f"**4. Dictamen Multimercado Exclusivo:** {p_top['razon']}"
         )
+
+        alertas_finales = analisis_raw.get("alertas", [])
+        if probs["confianza"] < 62.0:
+            alertas_finales.append("⚠️ Advertencia de Incertidumbre: Partido con alta entropía o dispersión en la forma reciente.")
 
         return Match(
             fixture_id=fix["fixture"]["id"] if fix else None,
@@ -237,6 +240,7 @@ class SALMEngine:
             local=loc_name,
             visitante=vis_name,
             h2h=analisis_raw["h2h"],
+            lineups=analisis_raw.get("lineups_data", {}),
             analyzed_markets=todos_mercados,
             market_ranking=todos_mercados,
             main_prediction=p_top["m"],
@@ -245,5 +249,6 @@ class SALMEngine:
             fair_odds=p_top["c"],
             confidence=probs["confianza"],
             risk=p_top["r"],
-            explanation=arg
+            explanation=arg,
+            alerts=alertas_finales
         )
