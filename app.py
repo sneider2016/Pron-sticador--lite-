@@ -70,7 +70,7 @@ with c2:
 
 if st.button("🔎 Generar Análisis Quirúrgico Completo"):
     st.session_state.clear()
-    with st.spinner("Consultando estadísticas reales e Inteligencia IA SALM..."):
+    with st.spinner("Consultando alineaciones, estadísticas reales e Inteligencia IA SALM..."):
         f_str = fecha_consulta.strftime("%Y-%m-%d")
         partido_analizado = engine.ejecutar_analisis_completo(local, visitante, f_str, liga)
 
@@ -87,6 +87,19 @@ if st.session_state.get("analizado", False):
     s_top = ranking[1] if len(ranking) > 1 else ranking[0]
 
     st.subheader("2. Dictamen del Pronosticador Élite")
+
+    # MÓDULO DE ALERTAS Y ALINEACIONES CONFIRMADAS
+    if match.alerts:
+        st.markdown("### 📋 Auditoría de Alineaciones & Alertas Tácticas")
+        for al in match.alerts:
+            if "🚨" in al:
+                st.error(al)
+            elif "⚠️" in al:
+                st.warning(al)
+            else:
+                st.info(al)
+        st.write("---")
+
     st.markdown("### 🔬 Argumentación Táctica Completa")
     st.markdown(match.explanation)
     st.write("---")
@@ -147,7 +160,7 @@ if st.session_state.get("analizado", False):
                 st.success(f"DECISIÓN: {eval_res['decision']}")
                 st.write(f"**Mercado Validado:** {target_market['m']}")
                 st.write(f"**Análisis de Valor (+EV):** Ventaja matemática del +{eval_res['ev_porcentaje']}%.")
-                st.write("**Entrada Sugerida:** 1 Unidad ($40.000 COP)")
+                st.write(f"**Gestión Sugerida (Kelly):** {eval_res['kelly_stake_pct']}% del Bankroll")
                 st.write(f"**Retorno Potencial:** {formatear_moneda(40000 * c_betplay)}")
     else:
         st.error("🛑 MERCADO NO DISPONIBLE en Betplay. Evalúa la otra opción o descarta el partido.")
