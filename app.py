@@ -11,7 +11,7 @@ import streamlit as st
 from config import APP_NAME
 from utils.helpers import formatear_moneda
 
-# Importación desde la carpeta engine/salm_engine.py
+# Importación del motor SALM desde engine/salm_engine.py
 try:
     from engine.salm_engine import SALMEngine
 except ModuleNotFoundError:
@@ -33,21 +33,37 @@ engine = SALMEngine()
 
 # SECCIÓN 1: Configuración del Partido
 st.subheader("1. Configuración del Partido")
+
+# Lista de ligas configuradas
+LISTA_LIGAS = [
+    "Liga BetPlay 🇨🇴",
+    "Premier League 🇬🇧",
+    "LaLiga 🇪🇸",
+    "Serie A 🇮🇹",
+    "Bundesliga 🇩🇪",
+    "Ligue 1 🇫🇷",
+    "UEFA Champions League 🏆",
+    "UEFA Europa League 🏆",
+    "UEFA Conference League 🏆",
+    "Liga Profesional Argentina 🇦🇷",
+    "Brasileirão Série A 🇧🇷",
+    "Liga MX 🇲🇽",
+    "MLS 🇺🇸",
+    "Otra liga"
+]
+
 c1, c2 = st.columns(2)
 with c1:
-    liga = st.selectbox(
-        "Liga",
-        [
-            "Liga BetPlay (Colombia)",
-            "Premier League",
-            "LaLiga",
-            "Serie A",
-            "Bundesliga",
-            "Copa Libertadores",
-            "Otra",
-        ],
-    )
+    liga_seleccionada = st.selectbox("Liga", LISTA_LIGAS)
+    
+    # Campo dinámico si el usuario escoge 'Otra liga'
+    if liga_seleccionada == "Otra liga":
+        liga = st.text_input("Nombre de la Liga:", value="Otra Liga")
+    else:
+        liga = liga_seleccionada
+
     local = st.text_input("Equipo Local", value="Deportivo Cali")
+
 with c2:
     fecha_consulta = st.date_input("Fecha", datetime.date.today())
     visitante = st.text_input("Equipo Visitante", value="Jaguares")
