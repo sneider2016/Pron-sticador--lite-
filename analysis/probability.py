@@ -21,18 +21,15 @@ class ProbabilityCalculator:
         Recalibración de Lambdas mediante A Priori Conjugada Gamma-Poisson (Empirical Bayes Shrinkage).
         Reduce la varianza de muestras pequeñas y minimiza el Brier Score out-of-sample.
         """
-        # Prior estructural de la liga (media = 1.30 goles/equipo, varianza = 0.55)
         mu_prior = 1.30
         var_prior = 0.55
-        alpha_0 = (mu_prior ** 2) / var_prior  # ~3.07
-        beta_0 = mu_prior / var_prior          # ~2.36
+        alpha_0 = (mu_prior ** 2) / var_prior
+        beta_0 = mu_prior / var_prior
 
-        # Muestra observada equivalente (n = 5 partidos)
         n_obs = 5.0
         k_h = l_h_raw * n_obs
         k_v = l_v_raw * n_obs
 
-        # Actualización de la esperanza a posteriori Bayesiana E[lambda | X]
         lambda_h_post = (alpha_0 + k_h) / (beta_0 + n_obs)
         lambda_v_post = (alpha_0 + k_v) / (beta_0 + n_obs)
 
@@ -503,4 +500,4 @@ class ProbabilityCalculator:
             "over35": round(p_over35 * 100.0, 1),
             "btts": round(p_btts * 100.0, 1),
             "confianza": confianza_final
-                }
+    }
