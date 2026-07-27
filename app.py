@@ -18,7 +18,7 @@ except ImportError:
 # ==========================================
 API_KEYS = [
     "3e69e51ac95c094a672f790edac978b0",  # Clave 1
-    "PEGA_AQUI_TU_NUEVA_CLAVE_2"        # Clave 2 (Opcional)
+    "14db0e108529faed46c94b3163188df5"        # Clave 2 (Opcional)
 ]
 HOST, APP_NAME = "v3.football.api-sports.io", "Pronósticador Élite Profesional"
 
