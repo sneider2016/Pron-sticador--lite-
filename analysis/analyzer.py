@@ -31,54 +31,11 @@ class Analyzer:
                 return vals
         return self.PROMEDIOS_LIGAS["default"]
 
-    def _extraer_stats_fixture(self, fix_stats_raw: list, team_id: int) -> dict:
-        """
-        Extrae xG, tiros, tiros a puerta, posesión, córneres y tarjetas del resultado de la API.
-        """
-        res = {
-            "xg": None,
-            "tiros": 12.0,
-            "tiros_puerta": 4.0,
-            "posesion": 50.0,
-            "corners": 4.8,
-            "tarjetas": 2.1
-        }
-        if not fix_stats_raw:
-            return res
-
-        for team_stat in fix_stats_raw:
-            if team_stat.get("team", {}).get("id") == team_id:
-                stats = team_stat.get("statistics", [])
-                for s in stats:
-                    tipo = str(s.get("type", "")).lower()
-                    val = s.get("value")
-                    if val is None:
-                        continue
-
-                    try:
-                        if "expected_goals" in tipo or "xg" in tipo:
-                            res["xg"] = float(val)
-                        elif "total shots" in tipo or "shots total" in tipo:
-                            res["tiros"] = float(val)
-                        elif "shots on goal" in tipo or "shots on target" in tipo:
-                            res["tiros_puerta"] = float(val)
-                        elif "ball possession" in tipo or "possession" in tipo:
-                            res["posesion"] = float(str(val).replace("%", ""))
-                        elif "corner kicks" in tipo or "corners" in tipo:
-                            res["corners"] = float(val)
-                        elif "yellow cards" in tipo:
-                            res["tarjetas"] += float(val)
-                        elif "red cards" in tipo:
-                            res["tarjetas"] += float(val) * 1.5
-                    except (ValueError, TypeError):
-                        pass
-                break
-        return res
-
     def _procesar_historial_ponderado(self, partidos: list, team_id: int) -> dict:
         """
-        Procesa el historial aplicando Ponderación por Decaimiento Exponencial (L1 > L2 > ... > L10)
-        y extrayendo más de 20 variables avanzadas de rendimiento.
+        Procesa el historial aplicando:
+        1. Ponderación por Decaimiento Exponencial (L1 > L2 > ... > L10).
+        2. Ajuste por Fuerza Real del Rival (Opponent Rating Factor).
         """
         if not partidos or not team_id:
             return {
@@ -89,6 +46,7 @@ class Analyzer:
                 "gc_exp": 1.00,
                 "forma_pts": 50.0,
                 "forma_exp": 50.0,
+                "fuerza_rival_avg": 1.0,
                 "xg_avg": 1.25,
                 "tiros_avg": 11.5,
                 "tiros_puerta_avg": 3.8,
@@ -118,6 +76,7 @@ class Analyzer:
         gf_exp_sum = 0.0
         gc_exp_sum = 0.0
         pts_exp_sum = 0.0
+        fuerza_rival_sum = 0.0
 
         xg_list = []
         tiros_list = []
@@ -143,7 +102,6 @@ class Analyzer:
         elo_dinamico = 1500.0
 
         for idx, partido in enumerate(partidos):
-            # Peso de decaimiento exponencial: L1 tiene mayor peso que L10
             peso = math.exp(-0.15 * idx)
             sum_pesos += peso
 
@@ -151,15 +109,25 @@ class Analyzer:
             goals = partido.get("goals", {})
 
             es_local = teams.get("home", {}).get("id") == team_id
+            rival_id = teams.get("away", {}).get("id") if es_local else teams.get("home", {}).get("id")
 
             g_favor = (goals.get("home") if goals.get("home") is not None else 0) if es_local else (goals.get("away") if goals.get("away") is not None else 0)
             g_contra = (goals.get("away") if goals.get("away") is not None else 0) if es_local else (goals.get("home") if goals.get("home") is not None else 0)
 
+            # Estimación de Fuerza Real del Rival (1.0 = Promedio, >1.1 = Rival Fuerte, <0.9 = Rival Débil)
+            fuerza_rival = 1.0 + ((g_contra - g_favor) * 0.04) if (g_favor + g_contra) > 0 else 1.0
+            fuerza_rival = max(0.75, min(1.35, fuerza_rival))
+            fuerza_rival_sum += fuerza_rival * peso
+
+            # Ajuste de producción de gol por calidad del rival
+            g_favor_ajustado = g_favor * fuerza_rival
+            g_contra_ajustado = g_contra / fuerza_rival
+
             gf_total += g_favor
             gc_total += g_contra
 
-            gf_exp_sum += g_favor * peso
-            gc_exp_sum += g_contra * peso
+            gf_exp_sum += g_favor_ajustado * peso
+            gc_exp_sum += g_contra_ajustado * peso
 
             tot_goles = g_favor + g_contra
             if tot_goles >= 2:
@@ -177,10 +145,9 @@ class Analyzer:
             if g_favor == 0:
                 failed_score_cnt += 1
 
-            # Racha y Puntos
             if g_favor > g_contra:
                 pts = 3
-                elo_dinamico += 15.0 * (1.0 / (idx + 1))
+                elo_dinamico += (15.0 * fuerza_rival) * (1.0 / (idx + 1))
                 if eval_v:
                     racha_v += 1
                 if eval_inv:
@@ -192,15 +159,14 @@ class Analyzer:
                     racha_inv += 1
             else:
                 pts = 0
-                elo_dinamico -= 12.0 * (1.0 / (idx + 1))
+                elo_dinamico -= (12.0 / fuerza_rival) * (1.0 / (idx + 1))
                 eval_v = False
                 eval_inv = False
 
             puntos_total += pts
             pts_exp_sum += pts * peso
 
-            # Estimación de xG y estadísticas de tiro si no están reportadas
-            xg_est = (g_favor * 0.5) + (1.2 if g_favor > 0 else 0.6)
+            xg_est = (g_favor * 0.45) + (1.1 if g_favor > 0 else 0.5)
             xg_list.append(xg_est)
             tiros_list.append(11.0 + (g_favor * 1.5))
             tiros_p_list.append(3.5 + (g_favor * 0.8))
@@ -236,6 +202,7 @@ class Analyzer:
             "gc_exp": round(gc_exp_sum / sum_pesos, 2) if sum_pesos > 0 else 1.00,
             "forma_pts": round(forma_pts, 1),
             "forma_exp": round(forma_exp, 1),
+            "fuerza_rival_avg": round(fuerza_rival_sum / sum_pesos, 2) if sum_pesos > 0 else 1.0,
             "xg_avg": round(sum(xg_list) / cant, 2) if cant > 0 else 1.25,
             "tiros_avg": round(sum(tiros_list) / cant, 1) if cant > 0 else 11.5,
             "tiros_puerta_avg": round(avg_tiros_p, 1),
@@ -329,7 +296,6 @@ class Analyzer:
         lesiones_h = [l for l in lesiones if l.get("team", {}).get("id") == home_id]
         lesiones_v = [l for l in lesiones if l.get("team", {}).get("id") == away_id]
 
-        # Ponderación multinivel de Ataque y Defensa
         gf_loc_efectivo = (stats_l5_h["gf_exp"] * 0.45) + (stats_cond_h["gf"] * 0.35) + (stats_l10_h["gf"] * 0.20)
         gc_loc_efectivo = (stats_l5_h["gc_exp"] * 0.45) + (stats_cond_h["gc"] * 0.35) + (stats_l10_h["gc"] * 0.20)
 
@@ -345,7 +311,6 @@ class Analyzer:
 
         exp_goles = (gf_loc_efectivo + gc_vis_efectivo + gf_vis_efectivo + gc_loc_efectivo) / 2.0
 
-        # Proyecciones ajustadas por liga de Córneres y Tarjetas
         corners_est = round((stats_l5_h["corners_favor_avg"] + stats_l5_v["corners_favor_avg"] + proms_liga["corners"]) / 3.0 + exp_goles * 0.4, 1)
         tarjetas_est = round((stats_l5_h["tarjetas_avg"] + stats_l5_v["tarjetas_avg"] + proms_liga["tarjetas"]) / 3.0, 1)
 
@@ -358,6 +323,8 @@ class Analyzer:
             "forma_visitante": stats_l5_v["forma_exp"],
             "forma_l10_local": stats_l10_h["forma_pts"],
             "forma_l10_visitante": stats_l10_v["forma_pts"],
+            "fuerza_rival_h": stats_l5_h["fuerza_rival_avg"],
+            "fuerza_rival_v": stats_l5_v["fuerza_rival_avg"],
             "xg_h": stats_l5_h["xg_avg"],
             "xg_v": stats_l5_v["xg_avg"],
             "tiros_h": stats_l5_h["tiros_avg"],
