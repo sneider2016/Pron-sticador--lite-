@@ -27,20 +27,20 @@ class FootballAPI:
                 data = respuesta.json()
                 errors = data.get("errors")
                 if errors and isinstance(errors, dict) and len(errors) > 0:
-                    self.ultimo_error = str(errors)
+                    msg = str(errors)
+                    self.ultimo_error = f"Error en API-Football: {msg}"
+                    return []
                 return data.get("response", [])
+            else:
+                self.ultimo_error = f"Código HTTP {respuesta.status_code}"
         except Exception as e:
-            self.ultimo_error = str(e)
+            self.ultimo_error = f"Error de conexión: {str(e)}"
         return []
 
     def buscar_partido(self, fecha: str) -> list:
         return self.consultar("fixtures", {"date": fecha})
 
     def buscar_equipo_por_nombre(self, nombre_equipo: str) -> dict:
-        """
-        Busca un equipo en API-Football limpiando los sufijos de país que rompen la API.
-        Ejemplo: 'Tigre de argentina' -> consulta 'Tigre' y encuentra C.A. Tigre oficial.
-        """
         nombre_limpio = limpiar_nombre_busqueda(nombre_equipo)
         
         intentos = [nombre_limpio, nombre_equipo]
@@ -54,7 +54,7 @@ class FootballAPI:
             res = self.consultar("teams", {"search": query})
             if res:
                 mejor_eq = None
-                max_s = 0
+                max_s = 0.0
                 query_norm = normalizar(query)
                 for item in res:
                     t_info = item.get("team", {})
@@ -72,17 +72,13 @@ class FootballAPI:
         return None
 
     def buscar_partido_por_equipos(self, local: str, visitante: str, fecha: str):
-        """
-        Busca el partido por fecha. Si la fecha no coincide exactamente, resuelve
-        los IDs reales de ambos equipos para extraer sus datos históricos auténticos.
-        """
         partidos = self.buscar_partido(fecha)
         norm_loc = normalizar(local)
         norm_vis = normalizar(visitante)
 
         if partidos:
             mejor_match = None
-            max_score = 0
+            max_score = 0.0
 
             for p in partidos:
                 l_api = p.get("teams", {}).get("home", {}).get("name", "")
@@ -99,7 +95,6 @@ class FootballAPI:
             if mejor_match:
                 return mejor_match
 
-        # Buscador inteligente por nombre limpio
         eq_loc = self.buscar_equipo_por_nombre(local)
         eq_vis = self.buscar_equipo_por_nombre(visitante)
 
