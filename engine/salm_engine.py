@@ -44,7 +44,7 @@ class SALMEngine:
                 "cuota_justa": c_justa
             })
 
-        ranking.sort(key=lambda x: x["p"], reverse=True)
+        ranking.sort(key=lambda x: x["probabilidad"], reverse=True)
         return ranking
 
     def evaluar_betplay(self, probabilidad: float, cuota: float) -> dict:
