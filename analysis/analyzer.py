@@ -241,6 +241,4 @@ class Analyzer:
             "tarjetas_est": tarjetas_est,
             "lineups_data": self.api.obtener_alineaciones(fixture_id) if fixture_id > 0 else [],
             "alertas": alertas,
-            "confianza": "Alta" if datos_reales_exitosos else "Baja",
-            "riesgo": "Bajo" if datos_reales_exitosos else "Alto"
-        } 
+            "confianza": "Alta" if da
