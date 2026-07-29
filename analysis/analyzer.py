@@ -28,8 +28,35 @@ class Analyzer:
 
     def _procesar_historial_ponderado(self, partidos: list, team_id: int) -> dict:
         if not partidos or not team_id:
-            # SI NO HAY PARTIDOS REALES, MARCA SIN DATOS (NO INVENTA GOLES)
-            return {"partidos": 0, "datos_reales": False}
+            # SI NO HAY PARTIDOS REALES, MARCA SIN DATOS Y DEVUELVE ESTRUCTURA SEGURA
+            return {
+                "partidos": 0,
+                "datos_reales": False,
+                "gf": 0.0,
+                "gc": 0.0,
+                "gf_exp": 0.0,
+                "gc_exp": 0.0,
+                "forma_pts": 50.0,
+                "forma_exp": 50.0,
+                "fuerza_rival_avg": 1.0,
+                "xg_avg": 1.0,
+                "tiros_avg": 10.0,
+                "tiros_puerta_avg": 3.8,
+                "posesion_avg": 50.0,
+                "corners_favor_avg": 4.5,
+                "tarjetas_avg": 2.0,
+                "over15_rate": 0.5,
+                "over25_rate": 0.5,
+                "under25_rate": 0.5,
+                "under35_rate": 0.5,
+                "btts_rate": 0.5,
+                "clean_sheet_rate": 0.2,
+                "failed_to_score_rate": 0.2,
+                "racha_victorias": 0,
+                "racha_invicto": 0,
+                "dias_descanso": 6,
+                "elo": 1500.0
+            }
 
         gf_total, gc_total, puntos_total = 0.0, 0.0, 0
         sum_pesos, gf_exp_sum, gc_exp_sum, pts_exp_sum = 0.0, 0.0, 0.0, 0.0
@@ -216,4 +243,4 @@ class Analyzer:
             "alertas": alertas,
             "confianza": "Alta" if datos_reales_exitosos else "Baja",
             "riesgo": "Bajo" if datos_reales_exitosos else "Alto"
-        }
+        } 
