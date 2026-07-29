@@ -64,7 +64,7 @@ class SALMEngine:
             "away_id": v_id,
             "fixture_id": fix["fixture"]["id"] if fix else 0,
             "league_id": fix["league"]["id"] if fix else 0,
-            "season": 2026,
+            "season": 2024,
             "liga": liga
         }
 
