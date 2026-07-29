@@ -28,7 +28,6 @@ class Analyzer:
 
     def _procesar_historial_ponderado(self, partidos: list, team_id: int) -> dict:
         if not partidos or not team_id:
-            # SI NO HAY PARTIDOS REALES, MARCA SIN DATOS Y DEVUELVE ESTRUCTURA SEGURA
             return {
                 "partidos": 0,
                 "datos_reales": False,
@@ -69,7 +68,6 @@ class Analyzer:
 
         racha_v, racha_inv = 0, 0
         eval_v, eval_inv = True, True
-        elo_equipo = 1500.0
 
         for idx, partido in enumerate(partidos):
             peso = math.exp(-0.12 * idx)
@@ -241,4 +239,6 @@ class Analyzer:
             "tarjetas_est": tarjetas_est,
             "lineups_data": self.api.obtener_alineaciones(fixture_id) if fixture_id > 0 else [],
             "alertas": alertas,
-            "confianza": "Alta" if da
+            "confianza": "Alta" if datos_reales_exitosos else "Baja",
+            "riesgo": "Bajo" if datos_reales_exitosos else "Alto"
+            }
