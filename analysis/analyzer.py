@@ -184,7 +184,8 @@ class Analyzer:
 
         if not stats_l10_h.get("datos_reales") or not stats_l10_v.get("datos_reales"):
             datos_reales_exitosos = False
-            alertas.append("🛑 ATENCIÓN: No se encontraron partidos reales en API-Football para uno o ambos equipos. Verifique la API Key o simplifique el nombre del club (ej. escribir 'Tigre' o 'Santos').")
+            err_msg = f" DETALLE DE LA API: {self.api.ultimo_error}" if self.api.ultimo_error else ""
+            alertas.append(f"🛑 ATENCIÓN: No se encontraron partidos reales en API-Football.{err_msg} Verifique la API Key o el saldo/cupo diario de su cuenta.")
 
         h2h_raw = self.api.head_to_head(home_id, away_id, 10) if (home_id and away_id) else []
         h2h_btts = 0
