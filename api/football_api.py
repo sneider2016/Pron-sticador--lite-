@@ -1,45 +1,58 @@
 import requests
 from datetime import datetime
 from rapidfuzz import fuzz
-from config import API_KEY, HOST
+from config import API_KEYS, HOST
 from utils.helpers import normalizar, limpiar_nombre_busqueda
 
 
 class FootballAPI:
 
     def __init__(self):
-        self.headers = {
-            "x-apisports-key": API_KEY
-        }
+        # Cargar lista con ambas claves
+        self.keys = [k.strip() for k in API_KEYS if k and len(k.strip()) > 10]
         self.ultimo_error = ""
 
     def consultar(self, endpoint: str, parametros: dict) -> list:
         url = f"https://{HOST}/{endpoint}"
-        try:
-            respuesta = requests.get(
-                url,
-                headers=self.headers,
-                params=parametros,
-                timeout=10
-            )
-            if respuesta.status_code == 200:
-                data = respuesta.json()
-                errors = data.get("errors")
-                if errors and isinstance(errors, dict) and len(errors) > 0:
-                    msg = str(errors)
-                    self.ultimo_error = f"Error en API-Football: {msg}"
-                    return []
-                return data.get("response", [])
-            else:
-                self.ultimo_error = f"Código HTTP {respuesta.status_code}"
-        except Exception as e:
-            self.ultimo_error = f"Error de conexión: {str(e)}"
+        if not self.keys:
+            self.ultimo_error = "No hay claves API configuradas."
+            return []
+
+        # Probar las claves en bucle automático: si una falla o está suspendida, pasa a la otra
+        for key in list(self.keys):
+            headers = {"x-apisports-key": key}
+            try:
+                respuesta = requests.get(
+                    url,
+                    headers=headers,
+                    params=parametros,
+                    timeout=10
+                )
+                if respuesta.status_code == 200:
+                    data = respuesta.json()
+                    errors = data.get("errors")
+                    if errors and isinstance(errors, dict) and len(errors) > 0:
+                        msg = str(errors)
+                        # Si la clave dio error de límite o suspensión, rotar a la siguiente clave
+                        if any(w in msg.lower() for w in ["limit", "suspended", "access", "token", "requests"]):
+                            if key in self.keys and len(self.keys) > 1:
+                                self.keys.remove(key)
+                            self.ultimo_error = f"Error en clave ({key[:6]}...): {msg}"
+                            continue
+                        else:
+                            self.ultimo_error = f"Error en API-Football: {msg}"
+                            return []
+                    return data.get("response", [])
+                else:
+                    self.ultimo_error = f"Código HTTP {respuesta.status_code}"
+            except Exception as e:
+                self.ultimo_error = f"Error de conexión: {str(e)}"
+
         return []
 
     def buscar_partido(self, fecha: str) -> list:
         anio = int(fecha.split("-")[0]) if fecha and "-" in fecha else datetime.now().year
         res = self.consultar("fixtures", {"date": fecha, "season": anio})
-        # Si la API gratuita bloquea el año seleccionado, consultar sin parámetro season restrictivo
         if not res and self.ultimo_error and "Free plans" in self.ultimo_error:
             self.ultimo_error = ""
             res = self.consultar("fixtures", {"date": fecha})
@@ -90,8 +103,12 @@ class FootballAPI:
                 l_api = p.get("teams", {}).get("home", {}).get("name", "")
                 v_api = p.get("teams", {}).get("away", {}).get("name", "")
 
-                s1 = fuzz.ratio(norm_loc, normalizar(l_api))
-                s2 = fuzz.ratio(norm_vis, normalizar(v_api))
+                l_norm = normalizar(l_api)
+                v_norm = normalizar(v_api)
+
+                s1 = fuzz.ratio(norm_loc, l_norm)
+                s2 = fuzz.ratio(norm_vis, v_norm)
+
                 if s1 >= 65 and s2 >= 65:
                     score = (s1 + s2) / 2.0
                     if score > max_score:
@@ -125,17 +142,13 @@ class FootballAPI:
             return []
         
         anio_req = season if season else datetime.now().year
-        
-        # 1. Consultar el año solicitado dinámicamente
         res = self.consultar("fixtures", {"team": team_id, "season": anio_req})
         
-        # 2. Si el plan gratuito de la API bloquea el año (ej. 2026), cambiar automáticamente a 2024 de respaldo
         if not res and self.ultimo_error and "Free plans" in self.ultimo_error:
             self.ultimo_error = ""
             anio_req = 2024
             res = self.consultar("fixtures", {"team": team_id, "season": 2024})
 
-        # 3. Si la temporada tiene pocos partidos, sumar la anterior
         if not res or len(res) < 3:
             res_prev = self.consultar("fixtures", {"team": team_id, "season": anio_req - 1})
             res = (res_prev or []) + (res or [])
