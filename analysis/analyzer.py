@@ -170,11 +170,13 @@ class Analyzer:
         away_id = datos_partido.get("away_id", 0)
         fixture_id = datos_partido.get("fixture_id", 0)
         liga = datos_partido.get("liga", "")
+        season = datos_partido.get("season", datetime.now().year)
 
         proms_liga = self._obtener_promedios_liga(liga)
 
-        l10_local_raw = self.api.ultimos_partidos(home_id, 10) if home_id else []
-        l10_visitante_raw = self.api.ultimos_partidos(away_id, 10) if away_id else []
+        # Enviar la temporada dinámicamente según la fecha seleccionada
+        l10_local_raw = self.api.ultimos_partidos(home_id, 10, season=season) if home_id else []
+        l10_visitante_raw = self.api.ultimos_partidos(away_id, 10, season=season) if away_id else []
 
         stats_l10_h = self._procesar_historial_ponderado(l10_local_raw, home_id)
         stats_l10_v = self._procesar_historial_ponderado(l10_visitante_raw, away_id)
@@ -242,4 +244,4 @@ class Analyzer:
             "alertas": alertas,
             "confianza": "Alta" if datos_reales_exitosos else "Baja",
             "riesgo": "Bajo" if datos_reales_exitosos else "Alto"
-            }
+                }
