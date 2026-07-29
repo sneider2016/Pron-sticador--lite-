@@ -94,7 +94,7 @@ class FootballAPI:
                 s2 = fuzz.ratio(norm_vis, normalizar(v_api))
                 score = (s1 + s2) / 2.0
 
-                if score > 35 and score > max_score:
+                if score > 55 and score > max_score:
                     max_score = score
                     mejor_match = p
 
