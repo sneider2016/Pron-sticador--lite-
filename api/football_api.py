@@ -37,7 +37,9 @@ class FootballAPI:
         return []
 
     def buscar_partido(self, fecha: str) -> list:
-        return self.consultar("fixtures", {"date": fecha})
+        # Extraer el año de la fecha seleccionada para no enviarle 2026 a la API
+        anio = int(fecha.split("-")[0]) if fecha and "-" in fecha else 2024
+        return self.consultar("fixtures", {"date": fecha, "season": anio})
 
     def buscar_equipo_por_nombre(self, nombre_equipo: str) -> dict:
         nombre_limpio = limpiar_nombre_busqueda(nombre_equipo)
@@ -114,18 +116,15 @@ class FootballAPI:
             "encontrado_vis": eq_vis is not None
         }
 
-    def ultimos_partidos(self, team_id: int, cantidad: int = 10) -> list:
-        """
-        Obtiene el historial de partidos usando la temporada 2024 (100% compatible gratis).
-        """
+    def ultimos_partidos(self, team_id: int, cantidad: int = 10, season: int = 2024) -> list:
         if not team_id:
             return []
         
-        # Consultar la temporada 2024 permitida en el plan gratuito
-        res = self.consultar("fixtures", {"team": team_id, "season": 2024})
+        # Enviar explícitamente season=2024 para el plan gratuito
+        res = self.consultar("fixtures", {"team": team_id, "season": season})
         
         if not res or len(res) < 3:
-            res_prev = self.consultar("fixtures", {"team": team_id, "season": 2023})
+            res_prev = self.consultar("fixtures", {"team": team_id, "season": season - 1})
             res = (res_prev or []) + (res or [])
 
         if res:
