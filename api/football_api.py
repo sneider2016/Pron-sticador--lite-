@@ -37,9 +37,13 @@ class FootballAPI:
         return []
 
     def buscar_partido(self, fecha: str) -> list:
-        # Extraer el año de la fecha seleccionada para no enviarle 2026 a la API
-        anio = int(fecha.split("-")[0]) if fecha and "-" in fecha else 2024
-        return self.consultar("fixtures", {"date": fecha, "season": anio})
+        anio = int(fecha.split("-")[0]) if fecha and "-" in fecha else datetime.now().year
+        res = self.consultar("fixtures", {"date": fecha, "season": anio})
+        # Si la API gratuita bloquea el año seleccionado, consultar sin parámetro season restrictivo
+        if not res and self.ultimo_error and "Free plans" in self.ultimo_error:
+            self.ultimo_error = ""
+            res = self.consultar("fixtures", {"date": fecha})
+        return res or []
 
     def buscar_equipo_por_nombre(self, nombre_equipo: str) -> dict:
         nombre_limpio = limpiar_nombre_busqueda(nombre_equipo)
@@ -76,7 +80,7 @@ class FootballAPI:
         norm_loc = normalizar(local)
         norm_vis = normalizar(visitante)
 
-        anio = int(fecha.split("-")[0]) if fecha and "-" in fecha else 2024
+        anio = int(fecha.split("-")[0]) if fecha and "-" in fecha else datetime.now().year
 
         if partidos:
             mejor_match = None
@@ -116,15 +120,24 @@ class FootballAPI:
             "encontrado_vis": eq_vis is not None
         }
 
-    def ultimos_partidos(self, team_id: int, cantidad: int = 10, season: int = 2024) -> list:
+    def ultimos_partidos(self, team_id: int, cantidad: int = 10, season: int = None) -> list:
         if not team_id:
             return []
         
-        # Enviar explícitamente season=2024 para el plan gratuito
-        res = self.consultar("fixtures", {"team": team_id, "season": season})
+        anio_req = season if season else datetime.now().year
         
+        # 1. Consultar el año solicitado dinámicamente
+        res = self.consultar("fixtures", {"team": team_id, "season": anio_req})
+        
+        # 2. Si el plan gratuito de la API bloquea el año (ej. 2026), cambiar automáticamente a 2024 de respaldo
+        if not res and self.ultimo_error and "Free plans" in self.ultimo_error:
+            self.ultimo_error = ""
+            anio_req = 2024
+            res = self.consultar("fixtures", {"team": team_id, "season": 2024})
+
+        # 3. Si la temporada tiene pocos partidos, sumar la anterior
         if not res or len(res) < 3:
-            res_prev = self.consultar("fixtures", {"team": team_id, "season": season - 1})
+            res_prev = self.consultar("fixtures", {"team": team_id, "season": anio_req - 1})
             res = (res_prev or []) + (res or [])
 
         if res:
@@ -172,16 +185,18 @@ class FootballAPI:
     def obtener_ligas(self) -> list:
         return self.consultar("leagues", {"current": "true"})
 
-    def obtener_equipos(self, league_id: int, season: int = 2024) -> list:
-        return self.consultar("teams", {"league": league_id, "season": season})
+    def obtener_equipos(self, league_id: int, season: int = None) -> list:
+        s = season if season else datetime.now().year
+        return self.consultar("teams", {"league": league_id, "season": s})
 
     def obtener_fixtures(self, league_id: int, season: int, fecha: str) -> list:
         return self.consultar("fixtures", {"league": league_id, "season": season, "date": fecha})
 
-    def obtener_clasificacion(self, league_id: int, season: int = 2024) -> list:
+    def obtener_clasificacion(self, league_id: int, season: int = None) -> list:
         if not league_id:
             return []
-        return self.consultar("standings", {"league": league_id, "season": season})
+        s = season if season else datetime.now().year
+        return self.consultar("standings", {"league": league_id, "season": s})
 
     def obtener_lesiones(self, fixture_id: int = None, team_id: int = None) -> list:
         params = {}
