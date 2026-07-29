@@ -17,7 +17,7 @@ def obtener_engine():
 engine = obtener_engine()
 
 # Función con Caché para evitar consumo repetido de API
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=900, show_spinner=False)
 def ejecutar_analisis_cached(_engine, local: str, visitante: str, fecha: str, liga: str):
     return _engine.ejecutar_analisis_completo(local, visitante, fecha, liga)
 
