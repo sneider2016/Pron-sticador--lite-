@@ -1,3 +1,4 @@
+from datetime import datetime
 from api.football_api import FootballAPI
 from analysis.analyzer import Analyzer
 from analysis.probability import ProbabilityCalculator
@@ -51,6 +52,9 @@ class SALMEngine:
         return self.value.analizar(probabilidad, cuota)
 
     def ejecutar_analisis_completo(self, local: str, visitante: str, fecha: str, liga: str) -> Match:
+        # Extraer el año dinámicamente según la fecha elegida por el usuario
+        anio_partido = int(fecha.split("-")[0]) if fecha and "-" in fecha else datetime.now().year
+
         fix = self.api.buscar_partido_por_equipos(local, visitante, fecha)
 
         h_id = fix["teams"]["home"]["id"] if fix else 0
@@ -64,7 +68,7 @@ class SALMEngine:
             "away_id": v_id,
             "fixture_id": fix["fixture"]["id"] if fix else 0,
             "league_id": fix["league"]["id"] if fix else 0,
-            "season": 2024,
+            "season": anio_partido,  # Dinámico según la fecha elegida
             "liga": liga
         }
 
@@ -87,7 +91,7 @@ class SALMEngine:
                     "razon": "No se encontraron partidos reales en API-Football."
                 }],
                 main_prediction="🛑 PRONÓSTICO SUSPENDIDO POR FALTA DE DATOS REALES",
-                alternative_prediction="Ajuste el nombre del equipo o revise el saldo/cupo de su API Key.",
+                alternative_prediction="Ajuste el nombre del equipo o revise el saldo/cupo diario de su API Key.",
                 explanation="**Atención:** No fue posible obtener el historial de los equipos desde API-Football. La aplicación se niega a calcular un pronóstico a ciegas con datos inventados.",
                 alerts=alertas_finales
             )
