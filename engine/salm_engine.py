@@ -183,6 +183,26 @@ class SALMEngine:
                 "razon": f"Conversión en ambos frentes con índice BTTS del {probs['btts']}%."
             })
 
+        # 5. Córneres (Tiros de Esquina)
+        if corners_est >= 8.5:
+            p_corn = round(min(88.0, 68.0 + (corners_est - 8.5) * 3.5), 1)
+            todos_mercados.append({
+                "m": "Más de 7.5 Tiros de Esquina Totales",
+                "p": p_corn,
+                "r": "Bajo" if p_corn >= 75.0 else "Bajo-Medio",
+                "razon": f"Proyección de {corners_est:.1f} córneres totales estimada por la API."
+            })
+
+        # 6. Tarjetas (Fricción Disciplinaria)
+        if tarjetas_est >= 4.0:
+            p_cards = round(min(86.0, 66.0 + (tarjetas_est - 4.0) * 4.0), 1)
+            todos_mercados.append({
+                "m": "Más de 3.5 Tarjetas Totales en el Partido",
+                "p": p_cards,
+                "r": "Bajo" if p_cards >= 75.0 else "Bajo-Medio",
+                "razon": f"Proyección de {tarjetas_est:.1f} tarjetas estimadas por la API."
+            })
+
         todos_mercados.sort(key=lambda x: x["p"], reverse=True)
 
         for cand in todos_mercados:
@@ -196,8 +216,8 @@ class SALMEngine:
 
         arg = (
             f"**1. Rendimiento Real API:** {loc_name} ({pf_h:.2f} GF / {pc_h:.2f} GC) vs {vis_name} ({pf_v:.2f} GF / {pc_v:.2f} GC).\n\n"
-            f"**2. Proyección Poisson Bivariada:** Gol Local: {l_h:.2f} | Gol Visita: {l_v:.2f} (Total: {exp_g:.2f} goles).\n\n"
-            f"**3. Contexto Táctico & H2H:** Promedio H2H {prom_h2h:.1f} goles | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
+            f"**2. Proyección Poisson Bivariada:** Gol Local: {l_h:.2f} | Gol Visita: {l_v:.2f} (Total: {exp_g:.2f} goles esperados).\n\n"
+            f"**3. Contexto Táctico, H2H & Disciplina:** Promedio H2H: {prom_h2h:.1f} goles | Córneres Est: {corners_est:.1f} | Tarjetas Est: {tarjetas_est:.1f} | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
             f"**4. Dictamen Multimercado Exclusivo:** {p_top['razon']}"
         )
 
