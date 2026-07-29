@@ -1,4 +1,5 @@
 import requests
+from datetime import datetime
 from rapidfuzz import fuzz
 from config import API_KEY, HOST
 from utils.helpers import normalizar, limpiar_nombre_busqueda
@@ -8,8 +9,6 @@ class FootballAPI:
 
     def __init__(self):
         self.headers = {
-            "x-rapidapi-host": HOST,
-            "x-rapidapi-key": API_KEY,
             "x-apisports-key": API_KEY
         }
         self.ultimo_error = ""
@@ -75,6 +74,7 @@ class FootballAPI:
         partidos = self.buscar_partido(fecha)
         norm_loc = normalizar(local)
         norm_vis = normalizar(visitante)
+        anio_actual = datetime.now().year
 
         if partidos:
             mejor_match = None
@@ -88,7 +88,7 @@ class FootballAPI:
                 s2 = fuzz.ratio(norm_vis, normalizar(v_api))
                 score = (s1 + s2) / 2.0
 
-                if score > 40 and score > max_score:
+                if score > 35 and score > max_score:
                     max_score = score
                     mejor_match = p
 
@@ -105,7 +105,7 @@ class FootballAPI:
 
         return {
             "fixture": {"id": 0},
-            "league": {"id": 0, "season": 2026},
+            "league": {"id": 0, "season": anio_actual},
             "teams": {
                 "home": {"id": h_id, "name": h_name},
                 "away": {"id": v_id, "name": v_name}
@@ -115,23 +115,54 @@ class FootballAPI:
         }
 
     def ultimos_partidos(self, team_id: int, cantidad: int = 10) -> list:
+        """
+        Obtiene los últimos partidos dinámicamente según el año actual
+        y de la temporada anterior si apenas está empezando el año.
+        """
         if not team_id:
             return []
-        return self.consultar("fixtures", {"team": team_id, "last": cantidad})
+        
+        anio_actual = datetime.now().year
+        
+        # 1. Consultar automáticamente el año en curso
+        res = self.consultar("fixtures", {"team": team_id, "season": anio_actual})
+        
+        # 2. Si la temporada actual tiene muy pocos partidos (ej. enero/febrero), suma la temporada anterior
+        if not res or len(res) < 3:
+            res_prev = self.consultar("fixtures", {"team": team_id, "season": anio_actual - 1})
+            res = (res_prev or []) + (res or [])
+
+        if res:
+            terminados = [
+                p for p in res 
+                if p.get("fixture", {}).get("status", {}).get("short") in ["FT", "AET", "PEN"]
+            ]
+            terminados.sort(
+                key=lambda x: x.get("fixture", {}).get("date", ""), 
+                reverse=True
+            )
+            return terminados[:cantidad]
+
+        return []
 
     def ultimos_partidos_condicion(self, team_id: int, es_local: bool, cantidad: int = 5) -> list:
-        if not team_id:
+        todos = self.ultimos_partidos(team_id, cantidad=15)
+        if not todos:
             return []
-        param = {"team": team_id, "last": cantidad, "venue": "home" if es_local else "away"}
-        return self.consultar("fixtures", param)
+        condicion = [
+            p for p in todos 
+            if (p.get("teams", {}).get("home", {}).get("id") == team_id if es_local else p.get("teams", {}).get("away", {}).get("id") == team_id)
+        ]
+        return condicion[:cantidad]
 
     def head_to_head(self, local_id: int, visitante_id: int, cantidad: int = 10) -> list:
         if not local_id or not visitante_id:
             return []
-        return self.consultar(
-            "fixtures/headtohead",
-            {"h2h": f"{local_id}-{visitante_id}", "last": cantidad}
-        )
+        res = self.consultar("fixtures/headtohead", {"h2h": f"{local_id}-{visitante_id}"})
+        if res:
+            res.sort(key=lambda x: x.get("fixture", {}).get("date", ""), reverse=True)
+            return res[:cantidad]
+        return []
 
     def estadisticas_fixture(self, fixture_id: int) -> list:
         if not fixture_id:
@@ -146,22 +177,18 @@ class FootballAPI:
     def obtener_ligas(self) -> list:
         return self.consultar("leagues", {"current": "true"})
 
-    def obtener_equipos(self, league_id: int, season: int) -> list:
-        return self.consultar("teams", {"league": league_id, "season": season})
+    def obtener_equipos(self, league_id: int, season: int = None) -> list:
+        s = season if season else datetime.now().year
+        return self.consultar("teams", {"league": league_id, "season": s})
 
     def obtener_fixtures(self, league_id: int, season: int, fecha: str) -> list:
-        return self.consultar(
-            "fixtures",
-            {"league": league_id, "season": season, "date": fecha}
-        )
+        return self.consultar("fixtures", {"league": league_id, "season": season, "date": fecha})
 
-    def obtener_clasificacion(self, league_id: int, season: int) -> list:
-        if not league_id or not season:
+    def obtener_clasificacion(self, league_id: int, season: int = None) -> list:
+        if not league_id:
             return []
-        return self.consultar(
-            "standings",
-            {"league": league_id, "season": season}
-        )
+        s = season if season else datetime.now().year
+        return self.consultar("standings", {"league": league_id, "season": s})
 
     def obtener_lesiones(self, fixture_id: int = None, team_id: int = None) -> list:
         params = {}
