@@ -1,4 +1,5 @@
 import requests
+import time
 from datetime import datetime
 from rapidfuzz import fuzz
 from config import API_KEYS, HOST
@@ -17,6 +18,9 @@ class FootballAPI:
         if not self.keys:
             self.ultimo_error = "No hay claves API configuradas."
             return []
+
+        # BLINDAJE DE VELOCIDAD: Pausa de 1.2 segundos entre llamadas a la API
+        time.sleep(1.2)
 
         # Probar las claves en bucle automático: si una falla o está suspendida, pasa a la otra
         for key in list(self.keys):
