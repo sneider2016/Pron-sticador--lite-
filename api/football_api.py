@@ -2,55 +2,43 @@ import requests
 import time
 from datetime import datetime
 from rapidfuzz import fuzz
-from config import API_KEYS, HOST
+from config import API_KEY, HOST
 from utils.helpers import normalizar, limpiar_nombre_busqueda
 
 
 class FootballAPI:
 
     def __init__(self):
-        # Cargar lista con ambas claves
-        self.keys = [k.strip() for k in API_KEYS if k and len(k.strip()) > 10]
+        self.headers = {
+            "x-apisports-key": API_KEY
+        }
         self.ultimo_error = ""
 
     def consultar(self, endpoint: str, parametros: dict) -> list:
         url = f"https://{HOST}/{endpoint}"
-        if not self.keys:
-            self.ultimo_error = "No hay claves API configuradas."
-            return []
-
-        # BLINDAJE DE VELOCIDAD: Pausa de 1.2 segundos entre llamadas a la API
+        
+        # BLINDAJE DE VELOCIDAD: Pausa de 1.2 segundos entre consultas
         time.sleep(1.2)
 
-        # Probar las claves en bucle automático: si una falla o está suspendida, pasa a la otra
-        for key in list(self.keys):
-            headers = {"x-apisports-key": key}
-            try:
-                respuesta = requests.get(
-                    url,
-                    headers=headers,
-                    params=parametros,
-                    timeout=10
-                )
-                if respuesta.status_code == 200:
-                    data = respuesta.json()
-                    errors = data.get("errors")
-                    if errors and isinstance(errors, dict) and len(errors) > 0:
-                        msg = str(errors)
-                        # Si la clave dio error de límite o suspensión, rotar a la siguiente clave
-                        if any(w in msg.lower() for w in ["limit", "suspended", "access", "token", "requests"]):
-                            if key in self.keys and len(self.keys) > 1:
-                                self.keys.remove(key)
-                            self.ultimo_error = f"Error en clave ({key[:6]}...): {msg}"
-                            continue
-                        else:
-                            self.ultimo_error = f"Error en API-Football: {msg}"
-                            return []
-                    return data.get("response", [])
-                else:
-                    self.ultimo_error = f"Código HTTP {respuesta.status_code}"
-            except Exception as e:
-                self.ultimo_error = f"Error de conexión: {str(e)}"
+        try:
+            respuesta = requests.get(
+                url,
+                headers=self.headers,
+                params=parametros,
+                timeout=10
+            )
+            if respuesta.status_code == 200:
+                data = respuesta.json()
+                errors = data.get("errors")
+                if errors and isinstance(errors, dict) and len(errors) > 0:
+                    msg = str(errors)
+                    self.ultimo_error = f"Error en API-Football: {msg}"
+                    return []
+                return data.get("response", [])
+            else:
+                self.ultimo_error = f"Código HTTP {respuesta.status_code}"
+        except Exception as e:
+            self.ultimo_error = f"Error de conexión: {str(e)}"
 
         return []
 
