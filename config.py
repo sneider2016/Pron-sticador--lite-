@@ -5,12 +5,8 @@ import os
 # Motor de Inteligencia Deportiva IA SneiderMompi (SALM)
 # ==========================================
 
-# Lista de Claves API juntas (Rotación automática)
-API_KEYS = [
-    "3e69e51ac95c094a672f790edac978b0",  # Clave 1
-    "42caec4a147fe899a40c454cc758ca54"         # Clave 2
-]
-
+# Clave API activa única
+API_KEY = "3e69e51ac95c094a672f790edac978b0"
 HOST = "v3.football.api-sports.io"
 
 APP_NAME = "Pronósticador Élite Profesional"
