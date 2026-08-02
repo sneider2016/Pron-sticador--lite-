@@ -96,6 +96,17 @@ class SALMEngine:
                 alerts=alertas_finales
             )
 
+        # AUDITORÍA DE ALINEACIONES
+        lineups_raw = analisis_raw.get("lineups_data", [])
+        if lineups_raw and len(lineups_raw) >= 2:
+            for team_l in lineups_raw:
+                tname = team_l.get("team", {}).get("name", "Equipo")
+                form = team_l.get("formation", "N/A")
+                starters = team_l.get("startXI", [])
+                alertas_finales.append(f"✅ {tname}: 11 Inicial Confirmado ({form}) con {len(starters)} titulares.")
+        else:
+            alertas_finales.append("⚠️ Alineaciones oficiales aún no confirmadas por la liga. Análisis elaborado con formación proyectada.")
+
         probs = self.probability.calcular(
             ataque_local=analisis_raw["ataque_local"],
             defensa_local=analisis_raw["defensa_local"],
