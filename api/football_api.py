@@ -57,6 +57,9 @@ class FootballAPI:
         if len(palabras) > 1:
             intentos.append(palabras[0])
 
+        norm_input = normalizar(nombre_equipo)
+        es_juvenil_input = any(w in norm_input for w in ["u21", "u20", "u19", "u18", "sub20", "sub21", "reserves", "femenil", "women"])
+
         for query in intentos:
             if not query or len(query) < 3:
                 continue
@@ -68,14 +71,26 @@ class FootballAPI:
                 for item in res:
                     t_info = item.get("team", {})
                     t_name = t_info.get("name", "")
-                    score = fuzz.ratio(query_norm, normalizar(t_name))
+                    t_norm = normalizar(t_name)
+
+                    # Filtrar equipos juveniles si el usuario no los pidió expresamente
+                    es_juvenil_api = any(w in t_norm for w in ["u21", "u20", "u19", "u18", "sub20", "sub21", "reserves", "femenil", "women"])
+                    if es_juvenil_api and not es_juvenil_input:
+                        continue
+
+                    score = fuzz.ratio(query_norm, t_norm)
                     if score > max_s:
                         max_s = score
                         mejor_eq = t_info
 
                 if mejor_eq:
                     return mejor_eq
-                elif res:
+                elif res and not es_juvenil_input:
+                    for item in res:
+                        t_info = item.get("team", {})
+                        t_norm = normalizar(t_info.get("name", ""))
+                        if not any(w in t_norm for w in ["u21", "u20", "u19", "sub20", "reserves", "femenil"]):
+                            return t_info
                     return res[0].get("team")
 
         return None
@@ -86,6 +101,7 @@ class FootballAPI:
         norm_vis = normalizar(visitante)
 
         anio = int(fecha.split("-")[0]) if fecha and "-" in fecha else datetime.now().year
+        es_juvenil_input = any(w in (norm_loc + " " + norm_vis) for w in ["u21", "u20", "u19", "sub20", "reserves", "femenil"])
 
         if partidos:
             mejor_match = None
@@ -97,6 +113,11 @@ class FootballAPI:
 
                 l_norm = normalizar(l_api)
                 v_norm = normalizar(v_api)
+
+                # Filtrar partidos juveniles si el usuario no los pidió expresamente
+                es_juvenil_api = any(w in (l_norm + " " + v_norm) for w in ["u21", "u20", "u19", "sub20", "reserves", "femenil"])
+                if es_juvenil_api and not es_juvenil_input:
+                    continue
 
                 s1 = max(fuzz.ratio(norm_loc, l_norm), fuzz.token_set_ratio(norm_loc, l_norm))
                 s2 = max(fuzz.ratio(norm_vis, v_norm), fuzz.token_set_ratio(norm_vis, v_norm))
