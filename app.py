@@ -71,12 +71,12 @@ if st.session_state.get("analizado", False):
     st.markdown(m.explanation)
     st.write("---")
 
-    p_top = ranking[0] if ranking else {"m": "N/A", "p": 0.0, "c": 999.0, "r": "N/A"}
+    p_top = ranking[0] if ranking else {"m": "N/A", "p": 0.0, "c": 999.0, "r": "N/A", "razon": "N/A"}
     s_top = ranking[1] if len(ranking) > 1 else p_top
 
     if p_top["p"] > 0:
-        st.success(f"🟢 **PRONÓSTICO PRINCIPAL**\n\n**Mercado:** {p_top['m']}\n\n**Cuota Justa:** {p_top['c']:.2f} | **Prob. Real:** {p_top['p']:.1f}%\n\n**Riesgo:** {p_top['r']}")
-        st.info(f"🟡 **PRONÓSTICO SECUNDARIO**\n\n**Mercado:** {s_top['m']}\n\n**Cuota Justa:** {s_top['c']:.2f} | **Prob. Real:** {s_top['p']:.1f}%\n\n**Riesgo:** {s_top['r']}")
+        st.success(f"🟢 **PRONÓSTICO PRINCIPAL**\n\n**Mercado:** {p_top['m']}\n\n**Cuota Justa:** {p_top['c']:.2f} | **Prob. Real:** {p_top['p']:.1f}%\n\n**Riesgo:** {p_top['r']}\n\n💡 **{p_top['razon']}**")
+        st.info(f"🟡 **PRONÓSTICO SECUNDARIO**\n\n**Mercado:** {s_top['m']}\n\n**Cuota Justa:** {s_top['c']:.2f} | **Prob. Real:** {s_top['p']:.1f}%\n\n**Riesgo:** {s_top['r']}\n\n💡 **{s_top['razon']}**")
 
         st.write("---")
         st.markdown("### 🎯 Verificación en Betplay")
