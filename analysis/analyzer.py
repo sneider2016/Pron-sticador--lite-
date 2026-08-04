@@ -115,8 +115,13 @@ class Analyzer:
             xg_list.append(xg_est)
             tiros_list.append(11.0 + (g_favor * 1.4))
             tiros_p_list.append(3.5 + (g_favor * 0.75))
-            corners_f_list.append(5.2 if es_local else 4.1)
-            tarjetas_list.append(2.1)
+            # CÁLCULO DINÁMICO DE CÓRNERES Y TARJETAS SEGÚN ATAQUE Y FRICCIÓN REAL DEL PARTIDO
+            c_f = (6.8 + (g_favor * 1.2)) if es_local else (5.2 + (g_favor * 1.0))
+            corners_f_list.append(c_f)
+
+            t_f = 2.5 + (tot_goles * 0.6) + (0.5 if g_contra > 1 else 0.0)
+            tarjetas_list.append(t_f)
+            
 
         cant = len(partidos)
         forma_pts = (puntos_total / (cant * 3.0)) * 100.0 if cant > 0 else 50.0
