@@ -136,14 +136,14 @@ class SALMEngine:
                 "m": f"Gana o Empata {loc_name} (Doble Chance 1X)",
                 "p": probs["doble_chance_1x"],
                 "r": "Bajo" if probs["doble_chance_1x"] >= 78.0 else "Bajo-Medio",
-                "razon": f"Sólida cobertura local con {probs['doble_chance_1x']}% de probabilidad real."
+                "razon": f"Justificación Cuantitativa: {loc_name} registra {pf_h:.2f} GF de local frente a la producción de {vis_name} de {pf_v:.2f} GF de visita, otorgando {probs['doble_chance_1x']}% de cobertura victoria/empate."
             })
         if probs["doble_chance_x2"] >= 60.0:
             todos_mercados.append({
                 "m": f"Gana o Empata {vis_name} (Doble Chance X2)",
                 "p": probs["doble_chance_x2"],
                 "r": "Bajo" if probs["doble_chance_x2"] >= 78.0 else "Bajo-Medio",
-                "razon": f"Rendimiento visitante con {probs['doble_chance_x2']}% de cobertura victoria/empate."
+                "razon": f"Justificación Cuantitativa: La solidez defensiva de {vis_name} ({pc_v:.2f} GC) sostiene un {probs['doble_chance_x2']}% de cobertura real, protegiendo la entrada ante la localía de {loc_name}."
             })
 
         # 2. Draw No Bet (DNB)
@@ -152,14 +152,14 @@ class SALMEngine:
                 "m": f"Gana {loc_name} Sin Empate (DNB)",
                 "p": probs["dnb_local"],
                 "r": "Bajo" if probs["dnb_local"] >= 72.0 else "Bajo-Medio",
-                "razon": f"Dominio local superior con {probs['dnb_local']}% DNB."
+                "razon": f"Justificación Cuantitativa: Dominio local superior ({pf_h:.2f} GF / {pc_h:.2f} GC) garantizando reembolso completo ante empate con {probs['dnb_local']}% DNB."
             })
         if probs["dnb_visitante"] >= 58.0:
             todos_mercados.append({
                 "m": f"Gana {vis_name} Sin Empate (DNB)",
                 "p": probs["dnb_visitante"],
                 "r": "Bajo-Medio",
-                "razon": f"Métricas de la visita ({pf_v:.1f} GF/juego) con {probs['dnb_visitante']}% DNB."
+                "razon": f"Justificación Cuantitativa: Métricas superiores de la visita ({pf_v:.2f} GF / {pc_v:.2f} GC) garantizando reembolso ante empate con {probs['dnb_visitante']}% DNB."
             })
 
         # 3. Goles
@@ -168,21 +168,21 @@ class SALMEngine:
                 "m": "Más de 1.5 Goles Totales en el Partido",
                 "p": probs["over15"],
                 "r": "Bajo",
-                "razon": f"Expectativa Poisson de {exp_g:.2f} goles esperados ({probs['over15']}% de probabilidad)."
+                "razon": f"Justificación Cuantitativa: Con {exp_g:.2f} goles esperados en la proyección Poisson Bivariada y {probs['over15']}% de probabilidad real, el duelo muestra alta conversión en ambos ataques."
             })
         if probs["under25"] >= 55.0:
             todos_mercados.append({
                 "m": "Menos de 2.5 Goles Totales (Under 2.5)",
                 "p": probs["under25"],
                 "r": "Bajo-Medio",
-                "razon": f"Baja expectativa de gol ({exp_g:.2f}) y ritmo defensivo."
+                "razon": f"Justificación Cuantitativa: Baja expectativa de gol ({exp_g:.2f}) y ritmo defensivo, otorgando {probs['under25']}% de probabilidad en marcador apretado."
             })
         if probs["under35"] >= 72.0:
             todos_mercados.append({
                 "m": "Menos de 3.5 Goles Totales",
                 "p": probs["under35"],
                 "r": "Bajo",
-                "razon": f"Margen amplio de seguridad con {probs['under35']}% de probabilidad real."
+                "razon": f"Justificación Cuantitativa: Margen amplio de seguridad ({probs['under35']}% prob. real) respaldado por la baja densidad de goles esperados ({exp_g:.2f})."
             })
 
         # 4. Ambos Anotan (BTTS)
@@ -191,7 +191,7 @@ class SALMEngine:
                 "m": "Ambos Equipos Anotan (Sí)",
                 "p": probs["btts"],
                 "r": "Bajo-Medio",
-                "razon": f"Conversión en ambos frentes con índice BTTS del {probs['btts']}%."
+                "razon": f"Justificación Cuantitativa: Conversión ofensiva en ambos frentes ({pf_h:.2f} GF local vs {pf_v:.2f} GF visita) con {probs['btts']}% de probabilidad BTTS."
             })
 
         # 5. Córneres (Tiros de Esquina)
@@ -201,7 +201,7 @@ class SALMEngine:
                 "m": "Más de 7.5 Tiros de Esquina Totales",
                 "p": p_corn,
                 "r": "Bajo" if p_corn >= 75.0 else "Bajo-Medio",
-                "razon": f"Proyección de {corners_est:.1f} córneres totales estimada por la API."
+                "razon": f"Justificación Cuantitativa: Proyección de {corners_est:.1f} córneres totales por alto flujo ofensivo en bandas ({p_corn}% de probabilidad)."
             })
 
         # 6. Tarjetas (Fricción Disciplinaria)
@@ -211,7 +211,7 @@ class SALMEngine:
                 "m": "Más de 3.5 Tarjetas Totales en el Partido",
                 "p": p_cards,
                 "r": "Bajo" if p_cards >= 75.0 else "Bajo-Medio",
-                "razon": f"Proyección de {tarjetas_est:.1f} tarjetas estimadas por la API."
+                "razon": f"Justificación Cuantitativa: Índice de fricción disciplinaria del cruce proyecta {tarjetas_est:.1f} tarjetas estimadas ({p_cards}% de probabilidad)."
             })
 
         todos_mercados.sort(key=lambda x: x["p"], reverse=True)
@@ -220,7 +220,7 @@ class SALMEngine:
             cand["c"] = self.value.cuota_justa(cand["p"])
 
         p_top = todos_mercados[0] if todos_mercados else {
-            "m": "Menos de 3.5 Goles Totales", "p": probs["under35"], "c": 1.30, "r": "Bajo", "razon": "Ritmo conservador proyectado."
+            "m": "Menos de 3.5 Goles Totales", "p": probs["under35"], "c": 1.30, "r": "Bajo", "razon": f"Justificación Cuantitativa: Ritmo conservador proyectado con {probs['under35']}% de probabilidad real."
         }
         
         s_top = todos_mercados[1] if len(todos_mercados) > 1 and todos_mercados[1]["m"] != p_top["m"] else (todos_mercados[2] if len(todos_mercados) > 2 else p_top)
