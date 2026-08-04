@@ -52,7 +52,6 @@ class SALMEngine:
         return self.value.analizar(probabilidad, cuota)
 
     def ejecutar_analisis_completo(self, local: str, visitante: str, fecha: str, liga: str) -> Match:
-        # Extraer el año dinámicamente según la fecha elegida por el usuario
         anio_partido = int(fecha.split("-")[0]) if fecha and "-" in fecha else datetime.now().year
 
         fix = self.api.buscar_partido_por_equipos(local, visitante, fecha)
@@ -68,14 +67,13 @@ class SALMEngine:
             "away_id": v_id,
             "fixture_id": fix["fixture"]["id"] if fix else 0,
             "league_id": fix["league"]["id"] if fix else 0,
-            "season": anio_partido,  # Dinámico según la fecha elegida
+            "season": anio_partido,
             "liga": liga
         }
 
         analisis_raw = self.analyzer.analizar(datos_partido)
         alertas_finales = list(analisis_raw.get("alertas", []))
 
-        # SI LA API NO OBTUVO PARTIDOS REALES, CANCELA EL PRONÓSTICO FALSO
         if not analisis_raw.get("datos_reales_ok", False):
             return Match(
                 fixture_id=0,
@@ -98,11 +96,18 @@ class SALMEngine:
 
         # AUDITORÍA DE ALINEACIONES
         lineups_raw = analisis_raw.get("lineups_data", [])
+        confirmados = 0
         if lineups_raw and len(lineups_raw) >= 2:
             for team_l in lineups_raw:
+                starters = team_l.get("startXI", []) or []
+                if len(starters) >= 7:
+                    confirmados += 1
+
+        if confirmados >= 2:
+            for team_l in lineups_raw:
                 tname = team_l.get("team", {}).get("name", "Equipo")
-                form = team_l.get("formation", "N/A")
-                starters = team_l.get("startXI", [])
+                form = team_l.get("formation") or "N/A"
+                starters = team_l.get("startXI", []) or []
                 alertas_finales.append(f"✅ {tname}: 11 Inicial Confirmado ({form}) con {len(starters)} titulares.")
         else:
             alertas_finales.append("⚠️ Alineaciones oficiales aún no confirmadas por la liga. Análisis elaborado con formación proyectada.")
@@ -136,14 +141,14 @@ class SALMEngine:
                 "m": f"Gana o Empata {loc_name} (Doble Chance 1X)",
                 "p": probs["doble_chance_1x"],
                 "r": "Bajo" if probs["doble_chance_1x"] >= 78.0 else "Bajo-Medio",
-                "razon": f"Justificación Cuantitativa: {loc_name} registra {pf_h:.2f} GF de local frente a la producción de {vis_name} de {pf_v:.2f} GF de visita, otorgando {probs['doble_chance_1x']}% de cobertura victoria/empate."
+                "razon": f"Justificación Cuantitativa: Sólida cobertura local del {probs['doble_chance_1x']}% respaldada por baja probabilidad de victoria directa del visitante."
             })
         if probs["doble_chance_x2"] >= 60.0:
             todos_mercados.append({
                 "m": f"Gana o Empata {vis_name} (Doble Chance X2)",
                 "p": probs["doble_chance_x2"],
                 "r": "Bajo" if probs["doble_chance_x2"] >= 78.0 else "Bajo-Medio",
-                "razon": f"Justificación Cuantitativa: La solidez defensiva de {vis_name} ({pc_v:.2f} GC) sostiene un {probs['doble_chance_x2']}% de cobertura real, protegiendo la entrada ante la localía de {loc_name}."
+                "razon": f"Justificación Cuantitativa: La solidez defensiva del visitante sostiene un {probs['doble_chance_x2']}% de cobertura real, protegiendo la entrada ante la localía."
             })
 
         # 2. Draw No Bet (DNB)
@@ -152,14 +157,14 @@ class SALMEngine:
                 "m": f"Gana {loc_name} Sin Empate (DNB)",
                 "p": probs["dnb_local"],
                 "r": "Bajo" if probs["dnb_local"] >= 72.0 else "Bajo-Medio",
-                "razon": f"Justificación Cuantitativa: Dominio local superior ({pf_h:.2f} GF / {pc_h:.2f} GC) garantizando reembolso completo ante empate con {probs['dnb_local']}% DNB."
+                "razon": f"Justificación Cuantitativa: Dominio ofensivo del local garantizando reembolso completo ante empate con {probs['dnb_local']}% DNB."
             })
         if probs["dnb_visitante"] >= 58.0:
             todos_mercados.append({
                 "m": f"Gana {vis_name} Sin Empate (DNB)",
                 "p": probs["dnb_visitante"],
                 "r": "Bajo-Medio",
-                "razon": f"Justificación Cuantitativa: Métricas superiores de la visita ({pf_v:.2f} GF / {pc_v:.2f} GC) garantizando reembolso ante empate con {probs['dnb_visitante']}% DNB."
+                "razon": f"Justificación Cuantitativa: Métricas superiores de rendimiento visitante garantizando reembolso ante empate con {probs['dnb_visitante']}% DNB."
             })
 
         # 3. Goles
@@ -168,7 +173,7 @@ class SALMEngine:
                 "m": "Más de 1.5 Goles Totales en el Partido",
                 "p": probs["over15"],
                 "r": "Bajo",
-                "razon": f"Justificación Cuantitativa: Con {exp_g:.2f} goles esperados en la proyección Poisson Bivariada y {probs['over15']}% de probabilidad real, el duelo muestra alta conversión en ambos ataques."
+                "razon": f"Justificación Cuantitativa: Expectativa Poisson Bivariada de {exp_g:.2f} goles esperados ({probs['over15']}% prob. real) con baja probabilidad de marcador a ceros."
             })
         if probs["under25"] >= 55.0:
             todos_mercados.append({
@@ -182,7 +187,7 @@ class SALMEngine:
                 "m": "Menos de 3.5 Goles Totales",
                 "p": probs["under35"],
                 "r": "Bajo",
-                "razon": f"Justificación Cuantitativa: Margen amplio de seguridad ({probs['under35']}% prob. real) respaldado por la baja densidad de goles esperados ({exp_g:.2f})."
+                "razon": f"Justificación Cuantitativa: Margen amplio de seguridad ({probs['under35']}% prob. real) en un trámite de baja densidad goleadora ({exp_g:.2f} esperados)."
             })
 
         # 4. Ambos Anotan (BTTS)
@@ -191,7 +196,7 @@ class SALMEngine:
                 "m": "Ambos Equipos Anotan (Sí)",
                 "p": probs["btts"],
                 "r": "Bajo-Medio",
-                "razon": f"Justificación Cuantitativa: Conversión ofensiva en ambos frentes ({pf_h:.2f} GF local vs {pf_v:.2f} GF visita) con {probs['btts']}% de probabilidad BTTS."
+                "razon": f"Justificación Cuantitativa: Conversión en ambos ataques con índice de probabilidad BTTS del {probs['btts']}%."
             })
 
         # 5. Córneres (Tiros de Esquina)
@@ -201,7 +206,7 @@ class SALMEngine:
                 "m": "Más de 7.5 Tiros de Esquina Totales",
                 "p": p_corn,
                 "r": "Bajo" if p_corn >= 75.0 else "Bajo-Medio",
-                "razon": f"Justificación Cuantitativa: Proyección de {corners_est:.1f} córneres totales por alto flujo ofensivo en bandas ({p_corn}% de probabilidad)."
+                "razon": f"Justificación Cuantitativa: Proyección de {corners_est:.1f} córneres totales por flujo ofensivo en bandas ({p_corn}% de probabilidad)."
             })
 
         # 6. Tarjetas (Fricción Disciplinaria)
@@ -229,7 +234,7 @@ class SALMEngine:
             f"**1. Rendimiento Real API:** {loc_name} ({pf_h:.2f} GF / {pc_h:.2f} GC) vs {vis_name} ({pf_v:.2f} GF / {pc_v:.2f} GC).\n\n"
             f"**2. Proyección Poisson Bivariada:** Gol Local: {l_h:.2f} | Gol Visita: {l_v:.2f} (Total: {exp_g:.2f} goles esperados).\n\n"
             f"**3. Contexto Táctico, H2H & Disciplina:** Promedio H2H: {prom_h2h:.1f} goles | Córneres Est: {corners_est:.1f} | Tarjetas Est: {tarjetas_est:.1f} | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
-            f"**4. Dictamen Multimercado Exclusivo:** {p_top['razon']}"
+            f"**4. Dictamen Multimercado Exclusivo:** Oportunidad destacada con {p_top['p']}% de probabilidad real."
         )
 
         return Match(
