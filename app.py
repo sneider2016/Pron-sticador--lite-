@@ -4,8 +4,8 @@ from engine.salm_engine import SALMEngine
 from config import APP_NAME, VERSION
 
 # Configuración de Streamlit
-st.set_page_config(page_title="Pronosticador Élite App", page_icon="⚽", layout="centered")
-st.title("⚽ PRONOSTICADOR ÉLITE")
+st.set_page_config(page_title="Pronosticador Élite Sneider App", page_icon="⚽", layout="centered")
+st.title("⚽ PRONOSTICADOR ÉLITE SNEIDER")
 st.caption(f"{APP_NAME} — {VERSION}")
 st.divider()
 
@@ -40,7 +40,7 @@ with c2:
 
 if st.button("🔎 Generar Análisis Quirúrgico Completo"):
     st.session_state.clear()
-    with st.spinner("Consultando alineaciones, estadísticas reales e Inteligencia IA SALM..."):
+    with st.spinner("Consultando alineaciones, árbitro designado, estadísticas reales e Inteligencia IA SALM..."):
         f_str = fecha_consulta.strftime("%Y-%m-%d")
         st.session_state["match"] = ejecutar_analisis_cached(engine, local, visitante, f_str, liga)
         st.session_state["analizado"] = True
@@ -54,12 +54,12 @@ if st.session_state.get("analizado", False):
         st.session_state.clear()
         st.rerun()
 
-    st.subheader("2. Dictamen del Pronosticador Élite")
+    st.subheader("2. Dictamen del Pronosticador Élite SNEIDER")
 
     if m.alerts:
-        st.markdown("### 📋 Auditoría de Alineaciones & Alertas de Datos")
+        st.markdown("### 📋 Auditoría de Alineaciones, Árbitro & Alertas de Datos")
         for al in m.alerts:
-            if "✅" in al:
+            if "✅" in al or "👨‍⚖️" in al:
                 st.info(al)
             elif "⚠️" in al:
                 st.warning(al)
