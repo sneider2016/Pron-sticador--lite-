@@ -115,13 +115,12 @@ class Analyzer:
             xg_list.append(xg_est)
             tiros_list.append(11.0 + (g_favor * 1.4))
             tiros_p_list.append(3.5 + (g_favor * 0.75))
-            # CÁLCULO DINÁMICO DE CÓRNERES Y TARJETAS SEGÚN ATAQUE Y FRICCIÓN REAL DEL PARTIDO
+            
             c_f = (6.8 + (g_favor * 1.2)) if es_local else (5.2 + (g_favor * 1.0))
             corners_f_list.append(c_f)
 
             t_f = 2.5 + (tot_goles * 0.6) + (0.5 if g_contra > 1 else 0.0)
             tarjetas_list.append(t_f)
-            
 
         cant = len(partidos)
         forma_pts = (puntos_total / (cant * 3.0)) * 100.0 if cant > 0 else 50.0
@@ -176,10 +175,10 @@ class Analyzer:
         fixture_id = datos_partido.get("fixture_id", 0)
         liga = datos_partido.get("liga", "")
         season = datos_partido.get("season", datetime.now().year)
+        referee_name = datos_partido.get("referee_name", "")
 
         proms_liga = self._obtener_promedios_liga(liga)
 
-        # Enviar la temporada dinámicamente según la fecha seleccionada
         l10_local_raw = self.api.ultimos_partidos(home_id, 10, season=season) if home_id else []
         l10_visitante_raw = self.api.ultimos_partidos(away_id, 10, season=season) if away_id else []
 
@@ -216,7 +215,13 @@ class Analyzer:
 
         exp_goles = (gf_loc + gc_vis + gf_vis + gc_loc) / 2.0
         corners_est = round((stats_l10_h["corners_favor_avg"] + stats_l10_v["corners_favor_avg"] + proms_liga["corners"]) / 3.0, 1)
-        tarjetas_est = round((stats_l10_h["tarjetas_avg"] + stats_l10_v["tarjetas_avg"] + proms_liga["tarjetas"]) / 3.0, 1)
+        
+        # INTEGRACIÓN DISCIPLINARIA DEL ÁRBITRO DESIGNADO EN TARJETAS
+        base_tarjetas = (stats_l10_h["tarjetas_avg"] + stats_l10_v["tarjetas_avg"] + proms_liga["tarjetas"]) / 3.0
+        if referee_name:
+            tarjetas_est = round((base_tarjetas * 0.70) + (proms_liga["tarjetas"] * 0.30), 1)
+        else:
+            tarjetas_est = round(base_tarjetas, 1)
 
         return {
             "datos_reales_ok": datos_reales_exitosos,
@@ -245,8 +250,9 @@ class Analyzer:
             "prom_goles_h2h": round(prom_goles_h2h, 2),
             "corners_est": corners_est,
             "tarjetas_est": tarjetas_est,
+            "referee_name": referee_name,
             "lineups_data": self.api.obtener_alineaciones(fixture_id) if fixture_id > 0 else [],
             "alertas": alertas,
             "confianza": "Alta" if datos_reales_exitosos else "Baja",
             "riesgo": "Bajo" if datos_reales_exitosos else "Alto"
-                }
+                    }
