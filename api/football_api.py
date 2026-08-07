@@ -129,6 +129,8 @@ class FootballAPI:
                         mejor_match = p
 
             if mejor_match:
+                referee = mejor_match.get("fixture", {}).get("referee", "")
+                mejor_match["referee_name"] = referee if referee else ""
                 return mejor_match
 
         eq_loc = self.buscar_equipo_por_nombre(local)
@@ -140,12 +142,13 @@ class FootballAPI:
         v_name = eq_vis.get("name") if eq_vis else visitante
 
         return {
-            "fixture": {"id": 0},
+            "fixture": {"id": 0, "referee": ""},
             "league": {"id": 0, "season": anio},
             "teams": {
                 "home": {"id": h_id, "name": h_name},
                 "away": {"id": v_id, "name": v_name}
             },
+            "referee_name": "",
             "encontrado_loc": eq_loc is not None,
             "encontrado_vis": eq_vis is not None
         }
