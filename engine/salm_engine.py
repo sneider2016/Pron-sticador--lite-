@@ -61,6 +61,7 @@ class SALMEngine:
 
         loc_name = fix["teams"]["home"]["name"] if fix else local
         vis_name = fix["teams"]["away"]["name"] if fix else visitante
+        referee_name = fix.get("referee_name", "") if fix else ""
 
         datos_partido = {
             "home_id": h_id,
@@ -68,7 +69,8 @@ class SALMEngine:
             "fixture_id": fix["fixture"]["id"] if fix else 0,
             "league_id": fix["league"]["id"] if fix else 0,
             "season": anio_partido,
-            "liga": liga
+            "liga": liga,
+            "referee_name": referee_name
         }
 
         analisis_raw = self.analyzer.analizar(datos_partido)
@@ -93,6 +95,12 @@ class SALMEngine:
                 explanation="**Atención:** No fue posible obtener el historial de los equipos desde API-Football. La aplicación se niega a calcular un pronóstico a ciegas con datos inventados.",
                 alerts=alertas_finales
             )
+
+        # AUDITORÍA DE ÁRBITRO DESIGNADO
+        if referee_name:
+            alertas_finales.append(f"👨‍⚖️ Árbitro Designado: {referee_name} (Perfil disciplinario integrado al análisis de tarjetas).")
+        else:
+            alertas_finales.append("👨‍⚖️ Árbitro: Terna arbitral oficial aún por confirmar por la organización de la liga.")
 
         # AUDITORÍA DE ALINEACIONES
         lineups_raw = analisis_raw.get("lineups_data", [])
@@ -209,14 +217,15 @@ class SALMEngine:
                 "razon": f"Justificación Cuantitativa: Proyección de {corners_est:.1f} córneres totales por flujo ofensivo en bandas ({p_corn}% de probabilidad)."
             })
 
-        # 6. Tarjetas (Fricción Disciplinaria)
+        # 6. Tarjetas (Fricción Disciplinaria + Árbitro)
         if tarjetas_est >= 4.0:
             p_cards = round(min(86.0, 66.0 + (tarjetas_est - 4.0) * 4.0), 1)
+            ref_txt = f" (Árbitro: {referee_name})" if referee_name else ""
             todos_mercados.append({
                 "m": "Más de 3.5 Tarjetas Totales en el Partido",
                 "p": p_cards,
                 "r": "Bajo" if p_cards >= 75.0 else "Bajo-Medio",
-                "razon": f"Justificación Cuantitativa: Índice de fricción disciplinaria del cruce proyecta {tarjetas_est:.1f} tarjetas estimadas ({p_cards}% de probabilidad)."
+                "razon": f"Justificación Cuantitativa: Índice de fricción disciplinaria del cruce{ref_txt} proyecta {tarjetas_est:.1f} tarjetas estimadas ({p_cards}% de probabilidad)."
             })
 
         todos_mercados.sort(key=lambda x: x["p"], reverse=True)
@@ -230,10 +239,11 @@ class SALMEngine:
         
         s_top = todos_mercados[1] if len(todos_mercados) > 1 and todos_mercados[1]["m"] != p_top["m"] else (todos_mercados[2] if len(todos_mercados) > 2 else p_top)
 
+        ref_arg = f" | Árbitro: {referee_name}" if referee_name else ""
         arg = (
             f"**1. Rendimiento Real API:** {loc_name} ({pf_h:.2f} GF / {pc_h:.2f} GC) vs {vis_name} ({pf_v:.2f} GF / {pc_v:.2f} GC).\n\n"
             f"**2. Proyección Poisson Bivariada:** Gol Local: {l_h:.2f} | Gol Visita: {l_v:.2f} (Total: {exp_g:.2f} goles esperados).\n\n"
-            f"**3. Contexto Táctico, H2H & Disciplina:** Promedio H2H: {prom_h2h:.1f} goles | Córneres Est: {corners_est:.1f} | Tarjetas Est: {tarjetas_est:.1f} | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
+            f"**3. Contexto Táctico, H2H & Disciplina:** Promedio H2H: {prom_h2h:.1f} goles | Córneres Est: {corners_est:.1f} | Tarjetas Est: {tarjetas_est:.1f}{ref_arg} | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
             f"**4. Dictamen Multimercado Exclusivo:** Oportunidad destacada con {p_top['p']}% de probabilidad real."
         )
 
