@@ -214,8 +214,10 @@ class Analyzer:
         gc_vis = stats_l10_v["gc"]
 
         exp_goles = (gf_loc + gc_vis + gf_vis + gc_loc) / 2.0
-        corners_est = round((stats_l10_h["corners_favor_avg"] + stats_l10_v["corners_favor_avg"] + proms_liga["corners"]) / 3.0, 1)
         
+        # PROYECCIÓN BASADA 100% EN EL HISTORIAL REAL DE LOS ÚLTIMOS 10 PARTIDOS PONDERADOS
+        corners_est = round((stats_l10_h["corners_favor_avg"] * 0.42) + (stats_l10_v["corners_favor_avg"] * 0.42) + (proms_liga["corners"] * 0.16), 1)
+
         # INTEGRACIÓN DISCIPLINARIA DEL ÁRBITRO DESIGNADO EN TARJETAS
         base_tarjetas = (stats_l10_h["tarjetas_avg"] + stats_l10_v["tarjetas_avg"] + proms_liga["tarjetas"]) / 3.0
         if referee_name:
@@ -255,4 +257,4 @@ class Analyzer:
             "alertas": alertas,
             "confianza": "Alta" if datos_reales_exitosos else "Baja",
             "riesgo": "Bajo" if datos_reales_exitosos else "Alto"
-                    }
+        }
