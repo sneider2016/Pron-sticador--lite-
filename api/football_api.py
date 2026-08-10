@@ -58,7 +58,8 @@ class FootballAPI:
             intentos.append(palabras[0])
 
         norm_input = normalizar(nombre_equipo)
-        es_juvenil_input = any(w in norm_input for w in ["u21", "u20", "u19", "u18", "sub20", "sub21", "reserves", "femenil", "women"])
+        palabras_bloqueo = ["u21", "u20", "u19", "u18", "sub20", "sub21", "reserves", "femenil", "women", "femenino", " w"]
+        es_juvenil_input = any(w in norm_input for w in palabras_bloqueo)
 
         for query in intentos:
             if not query or len(query) < 3:
@@ -73,8 +74,8 @@ class FootballAPI:
                     t_name = t_info.get("name", "")
                     t_norm = normalizar(t_name)
 
-                    # Filtrar equipos juveniles si el usuario no los pidió expresamente
-                    es_juvenil_api = any(w in t_norm for w in ["u21", "u20", "u19", "u18", "sub20", "sub21", "reserves", "femenil", "women"])
+                    # Filtrar equipos femeniles/juveniles si el usuario no los pidió expresamente
+                    es_juvenil_api = any(w in t_norm for w in palabras_bloqueo) or t_norm.endswith(" w")
                     if es_juvenil_api and not es_juvenil_input:
                         continue
 
@@ -89,7 +90,7 @@ class FootballAPI:
                     for item in res:
                         t_info = item.get("team", {})
                         t_norm = normalizar(t_info.get("name", ""))
-                        if not any(w in t_norm for w in ["u21", "u20", "u19", "sub20", "reserves", "femenil"]):
+                        if not (any(w in t_norm for w in palabras_bloqueo) or t_norm.endswith(" w")):
                             return t_info
                     return res[0].get("team")
 
@@ -101,7 +102,8 @@ class FootballAPI:
         norm_vis = normalizar(visitante)
 
         anio = int(fecha.split("-")[0]) if fecha and "-" in fecha else datetime.now().year
-        es_juvenil_input = any(w in (norm_loc + " " + norm_vis) for w in ["u21", "u20", "u19", "sub20", "reserves", "femenil"])
+        palabras_bloqueo = ["u21", "u20", "u19", "sub20", "reserves", "femenil", "women", "femenino", " w"]
+        es_juvenil_input = any(w in (norm_loc + " " + norm_vis) for w in palabras_bloqueo)
 
         if partidos:
             mejor_match = None
@@ -114,8 +116,8 @@ class FootballAPI:
                 l_norm = normalizar(l_api)
                 v_norm = normalizar(v_api)
 
-                # Filtrar partidos juveniles si el usuario no los pidió expresamente
-                es_juvenil_api = any(w in (l_norm + " " + v_norm) for w in ["u21", "u20", "u19", "sub20", "reserves", "femenil"])
+                # Filtrar partidos femeniles o juveniles si el usuario busca fútbol masculino
+                es_juvenil_api = any(w in (l_norm + " " + v_norm) for w in palabras_bloqueo) or l_norm.endswith(" w") or v_norm.endswith(" w")
                 if es_juvenil_api and not es_juvenil_input:
                     continue
 
@@ -133,6 +135,7 @@ class FootballAPI:
                 mejor_match["referee_name"] = referee if referee else ""
                 return mejor_match
 
+        # Si el partido no está programado en esa fecha exacta, devuelve id: 0 para activar la regla de seguridad
         eq_loc = self.buscar_equipo_por_nombre(local)
         eq_vis = self.buscar_equipo_por_nombre(visitante)
 
