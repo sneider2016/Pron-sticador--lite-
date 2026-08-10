@@ -56,6 +56,29 @@ class SALMEngine:
 
         fix = self.api.buscar_partido_por_equipos(local, visitante, fecha)
 
+        # VALIDACIÓN DE FECHA ESTRICTA: Si no existe partido programado en la fecha exacta
+        if fix and fix.get("fixture", {}).get("id", 0) == 0:
+            loc_n = fix["teams"]["home"]["name"] if fix else local
+            vis_n = fix["teams"]["away"]["name"] if fix else visitante
+            return Match(
+                fixture_id=0,
+                liga=liga,
+                fecha=fecha,
+                local=loc_n,
+                visitante=vis_n,
+                market_ranking=[{
+                    "m": "🛑 FECHA INCORRECTA O PARTIDO NO PROGRAMADO",
+                    "p": 0.0,
+                    "c": 999.0,
+                    "r": "Alto",
+                    "razon": f"No hay partido agendado entre {loc_n} y {vis_n} para el {fecha}."
+                }],
+                main_prediction="🛑 NO HAY PARTIDO PROGRAMADO PARA ESTA FECHA",
+                alternative_prediction="Ajuste la fecha en el calendario oficial.",
+                explanation=f"**Atención:** No se encontró ningún partido oficial agendado entre **{loc_n}** y **{vis_n}** para la fecha **{fecha}**. Verifique la fecha oficial del encuentro en el calendario.",
+                alerts=[f"🛑 ATENCIÓN: No existe un partido oficial agendado entre {loc_n} y {vis_n} para el día {fecha}. Verifique la fecha oficial en el calendario."]
+            )
+
         h_id = fix["teams"]["home"]["id"] if fix else 0
         v_id = fix["teams"]["away"]["id"] if fix else 0
 
