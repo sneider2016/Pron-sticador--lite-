@@ -271,7 +271,8 @@ class SALMEngine:
             f"**1. Rendimiento Real API:** {loc_name} ({pf_h:.2f} GF / {pc_h:.2f} GC) vs {vis_name} ({pf_v:.2f} GF / {pc_v:.2f} GC).\n\n"
             f"**2. Proyección Poisson Bivariada:** Gol Local: {l_h:.2f} | Gol Visita: {l_v:.2f} (Total: {exp_g:.2f} goles esperados).\n\n"
             f"**3. Contexto Táctico, H2H & Disciplina:** Promedio H2H: {prom_h2h:.1f} goles | Córneres Est: {corners_est:.1f} | Tarjetas Est: {tarjetas_est:.1f}{ref_arg} | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
-            f"**4. Dictamen Multimercado Exclusivo:** Oportunidad destacada con {p_top['p']}% de probabilidad real."
+            f"**4. Dictamen Multimercado Exclusivo:** Oportunidad destacada con {p_top['p']}% de probabilidad real.\n\n"
+            f"**5. Competición Oficial API:** {liga_final}"
         )
 
         return Match(
@@ -293,4 +294,4 @@ class SALMEngine:
             risk=p_top["r"],
             explanation=arg,
             alerts=alertas_finales
-            )
+                                            )
