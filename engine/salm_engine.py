@@ -86,13 +86,17 @@ class SALMEngine:
         vis_name = fix["teams"]["away"]["name"] if fix else visitante
         referee_name = fix.get("referee_name", "") if fix else ""
 
+        # AUTO-DETECCIÓN DE LIGA OFICIAL DESDE LA API
+        nombre_liga_oficial = fix.get("league", {}).get("name", "") if fix else ""
+        liga_final = nombre_liga_oficial if nombre_liga_oficial and nombre_liga_oficial != "0" else liga
+
         datos_partido = {
             "home_id": h_id,
             "away_id": v_id,
             "fixture_id": fix["fixture"]["id"] if fix else 0,
             "league_id": fix["league"]["id"] if fix else 0,
             "season": anio_partido,
-            "liga": liga,
+            "liga": liga_final,
             "referee_name": referee_name
         }
 
@@ -102,7 +106,7 @@ class SALMEngine:
         if not analisis_raw.get("datos_reales_ok", False):
             return Match(
                 fixture_id=0,
-                liga=liga,
+                liga=liga_final,
                 fecha=fecha,
                 local=loc_name,
                 visitante=vis_name,
@@ -274,7 +278,7 @@ class SALMEngine:
             fixture_id=fix["fixture"]["id"] if fix else None,
             league_id=fix["league"]["id"] if fix else None,
             season=fix["league"]["season"] if fix else None,
-            liga=liga,
+            liga=liga_final,
             fecha=fecha,
             local=loc_name,
             visitante=vis_name,
@@ -289,4 +293,4 @@ class SALMEngine:
             risk=p_top["r"],
             explanation=arg,
             alerts=alertas_finales
-        )
+            )
