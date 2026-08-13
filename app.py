@@ -16,7 +16,7 @@ def obtener_engine():
 
 engine = obtener_engine()
 
-# Función con Caché para evitar consumo repetido de API
+# Función con Caché
 @st.cache_data(ttl=900, show_spinner=False)
 def ejecutar_analisis_cached(_engine, local: str, visitante: str, fecha: str, liga: str):
     return _engine.ejecutar_analisis_completo(local, visitante, fecha, liga)
@@ -33,10 +33,10 @@ c1, c2 = st.columns(2)
 with c1:
     liga_sel = st.selectbox("Liga", LISTA_LIGAS)
     liga = st.text_input("Nombre:", value="Otra Liga") if liga_sel == "Otra liga" else liga_sel
-    local = st.text_input("Equipo Local", value="A")
+    local = st.text_input("Equipo Local", value="Tigre")
 with c2:
     fecha_consulta = st.date_input("Fecha", datetime.date.today())
-    visitante = st.text_input("Equipo Visitante", value="B")
+    visitante = st.text_input("Equipo Visitante", value="Racing Club")
 
 if st.button("🔎 Generar Análisis Quirúrgico Completo"):
     st.session_state.clear()
@@ -72,16 +72,25 @@ if st.session_state.get("analizado", False):
     st.write("---")
 
     p_top = ranking[0] if ranking else {"m": "N/A", "p": 0.0, "c": 999.0, "r": "N/A", "razon": "N/A"}
-    s_top = ranking[1] if len(ranking) > 1 else p_top
+    s_top = ranking[1] if len(ranking) > 1 else {"m": "🛑 NINGUNO ADICIONAL", "p": 0.0, "c": 999.0, "r": "N/A", "razon": "Justificación Cuantitativa: Únicamente el Pronóstico Principal cumplió con la alta probabilidad mínima del 70.0%. No hubo más mercados que alcanzaran este porcentaje mínimo."}
 
     if p_top["p"] > 0:
         st.success(f"🟢 **PRONÓSTICO PRINCIPAL**\n\n**Mercado:** {p_top['m']}\n\n**Cuota Justa:** {p_top['c']:.2f} | **Prob. Real:** {p_top['p']:.1f}%\n\n**Riesgo:** {p_top['r']}\n\n💡 **{p_top['razon']}**")
-        st.info(f"🟡 **PRONÓSTICO SECUNDARIO**\n\n**Mercado:** {s_top['m']}\n\n**Cuota Justa:** {s_top['c']:.2f} | **Prob. Real:** {s_top['p']:.1f}%\n\n**Riesgo:** {s_top['r']}\n\n💡 **{s_top['razon']}**")
+        
+        if s_top["p"] > 0:
+            st.info(f"🟡 **PRONÓSTICO SECUNDARIO**\n\n**Mercado:** {s_top['m']}\n\n**Cuota Justa:** {s_top['c']:.2f} | **Prob. Real:** {s_top['p']:.1f}%\n\n**Riesgo:** {s_top['r']}\n\n💡 **{s_top['razon']}**")
+        else:
+            st.info(f"🟡 **PRONÓSTICO SECUNDARIO**\n\n**Mercado:** {s_top['m']}\n\n💡 **{s_top['razon']}**")
 
         st.write("---")
         st.markdown("### 🎯 Verificación en Betplay")
-        opcion = st.radio("Mercado a evaluar:", [f"Principal: {p_top['m']}", f"Secundario: {s_top['m']}"], key="rad_m")
-        target_m = p_top if "Principal" in opcion else s_top
+        
+        if s_top["p"] > 0:
+            opcion = st.radio("Mercado a evaluar:", [f"Principal: {p_top['m']}", f"Secundario: {s_top['m']}"], key="rad_m")
+            target_m = p_top if "Principal" in opcion else s_top
+        else:
+            st.write(f"Evaluando mercado único: **{p_top['m']}**")
+            target_m = p_top
 
         c_betplay = st.number_input(f"Cuota actual en Betplay para '{target_m['m']}':", min_value=1.01, max_value=20.0, value=1.75, step=0.01, key="in_c")
         if st.button("⚡ EVALUAR Y APLICAR REGLA DE ORO"):
