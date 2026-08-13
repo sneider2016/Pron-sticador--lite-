@@ -33,10 +33,10 @@ c1, c2 = st.columns(2)
 with c1:
     liga_sel = st.selectbox("Liga", LISTA_LIGAS)
     liga = st.text_input("Nombre:", value="Otra Liga") if liga_sel == "Otra liga" else liga_sel
-    local = st.text_input("Equipo Local", value="Tigre")
+    local = st.text_input("Equipo Local", value="A")
 with c2:
     fecha_consulta = st.date_input("Fecha", datetime.date.today())
-    visitante = st.text_input("Equipo Visitante", value="Racing Club")
+    visitante = st.text_input("Equipo Visitante", value="B")
 
 if st.button("🔎 Generar Análisis Quirúrgico Completo"):
     st.session_state.clear()
