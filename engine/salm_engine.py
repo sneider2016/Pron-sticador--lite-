@@ -204,7 +204,7 @@ class SALMEngine:
                 "razon": f"Justificación Cuantitativa: Métricas superiores de rendimiento visitante garantizando reembolso ante empate con {probs['dnb_visitante']}% DNB."
             })
 
-        # 3. Goles (Exige >= 70.0%)
+        # 3. Goles
         if probs["over15"] >= 70.0:
             todos_mercados.append({
                 "m": "Más de 1.5 Goles Totales en el Partido",
@@ -261,6 +261,9 @@ class SALMEngine:
 
         todos_mercados.sort(key=lambda x: x["p"], reverse=True)
 
+        for cand in todos_mercados:
+            cand["c"] = self.value.cuota_justa(cand["p"])
+
         # MANEJO LIMPIO DE CASO SIN MERCADOS O SOLO 1 MERCADO GE 70.0%
         if not todos_mercados:
             alertas_finales.append("🛑 RITMO INCIERTO / ALTA VARIANZA: Ningún mercado en este partido alcanza la probabilidad de alta seguridad mínima del 70.0%. Se recomienda abstenerse de apostar en este encuentro para cuidar el capital.")
@@ -268,17 +271,17 @@ class SALMEngine:
                 "m": "🛑 RITMO INCIERTO (Sin Mercado GE 70%)", "p": 0.0, "c": 999.0, "r": "Alto", "razon": "Justificación Cuantitativa: Ningún mercado alcanza la probabilidad de alta seguridad mínima del 70.0%."
             }
             s_top = p_top
+            ranking_final = [p_top]
         elif len(todos_mercados) == 1:
             p_top = todos_mercados[0]
             s_top = {
                 "m": "🛑 NINGUNO ADICIONAL", "p": 0.0, "c": 999.0, "r": "N/A", "razon": "Justificación Cuantitativa: Únicamente el Pronóstico Principal cumplió con la alta probabilidad mínima del 70.0%. No hubo más mercados que alcanzaran este porcentaje mínimo."
             }
+            ranking_final = [p_top, s_top]
         else:
             p_top = todos_mercados[0]
             s_top = todos_mercados[1] if todos_mercados[1]["m"] != p_top["m"] else (todos_mercados[2] if len(todos_mercados) > 2 else p_top)
-
-        for cand in todos_mercados:
-            cand["c"] = self.value.cuota_justa(cand["p"])
+            ranking_final = todos_mercados
 
         ref_arg = f" | Árbitro: {referee_name}" if referee_name else ""
         arg = (
@@ -299,7 +302,7 @@ class SALMEngine:
             visitante=vis_name,
             h2h=analisis_raw["h2h"],
             analyzed_markets=todos_mercados,
-            market_ranking=todos_mercados if todos_mercados else [p_top],
+            market_ranking=ranking_final,
             main_prediction=p_top["m"],
             alternative_prediction=s_top["m"],
             estimated_probability=p_top["p"],
