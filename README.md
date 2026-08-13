@@ -9,7 +9,7 @@ Analizar partidos de fútbol de forma independiente, estimar probabilidades fund
 ## Filosofía
 
 - Cada partido es único.
-- Auditoría estricta de alineaciones confirmadasy árbitro designado.
+- Auditoría estricta de alineaciones confirmadas y árbitro designado.
 - Sin sesgos.
 - Sin probabilidades inventadas.
 - El sistema puede decir NO APUESTO si no se cumple con los criterios y rangos estipulados.
