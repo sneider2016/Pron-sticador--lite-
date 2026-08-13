@@ -261,16 +261,21 @@ class SALMEngine:
 
         todos_mercados.sort(key=lambda x: x["p"], reverse=True)
 
-        # MANEJO DE CASO SIN MERCADOS GE 70.0%
+        # MANEJO LIMPIO DE CASO SIN MERCADOS O SOLO 1 MERCADO GE 70.0%
         if not todos_mercados:
             alertas_finales.append("🛑 RITMO INCIERTO / ALTA VARIANZA: Ningún mercado en este partido alcanza la probabilidad de alta seguridad mínima del 70.0%. Se recomienda abstenerse de apostar en este encuentro para cuidar el capital.")
             p_top = {
-                "m": "🛑 RITMO INCIERTO (Sin Mercado GE 70%)", "p": 0.0, "c": 999.0, "r": "Alto", "razon": "Ningún mercado alcanza la probabilidad de alta seguridad mínima del 70.0%."
+                "m": "🛑 RITMO INCIERTO (Sin Mercado GE 70%)", "p": 0.0, "c": 999.0, "r": "Alto", "razon": "Justificación Cuantitativa: Ningún mercado alcanza la probabilidad de alta seguridad mínima del 70.0%."
             }
             s_top = p_top
+        elif len(todos_mercados) == 1:
+            p_top = todos_mercados[0]
+            s_top = {
+                "m": "🛑 NINGUNO ADICIONAL", "p": 0.0, "c": 999.0, "r": "N/A", "razon": "Justificación Cuantitativa: Únicamente el Pronóstico Principal cumplió con la alta probabilidad mínima del 70.0%. No hubo más mercados que alcanzaran este porcentaje mínimo."
+            }
         else:
             p_top = todos_mercados[0]
-            s_top = todos_mercados[1] if len(todos_mercados) > 1 and todos_mercados[1]["m"] != p_top["m"] else (todos_mercados[2] if len(todos_mercados) > 2 else p_top)
+            s_top = todos_mercados[1] if todos_mercados[1]["m"] != p_top["m"] else (todos_mercados[2] if len(todos_mercados) > 2 else p_top)
 
         for cand in todos_mercados:
             cand["c"] = self.value.cuota_justa(cand["p"])
@@ -303,4 +308,4 @@ class SALMEngine:
             risk=p_top["r"],
             explanation=arg,
             alerts=alertas_finales
-                )
+        )
