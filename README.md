@@ -1,6 +1,6 @@
 # ⚽ Pronósticador Élite Profesional
 
-Motor de Inteligencia Deportiva IA SneiderMompi (SALM) - Versión 4.0 Surgeon Elite
+Motor de Inteligencia Deportiva IA SneiderMompi (SALM) - Versión 5.0 Ultra-Cirujano
 
 ## Objetivo
 
@@ -9,9 +9,9 @@ Analizar partidos de fútbol de forma independiente, estimar probabilidades fund
 ## Filosofía
 
 - Cada partido es único.
-- Auditoría estricta de alineaciones confirmadas.
+- Auditoría estricta de alineaciones confirmadasy árbitro designado.
 - Sin sesgos.
 - Sin probabilidades inventadas.
-- El sistema puede decir NO APUESTO.
+- El sistema puede decir NO APUESTO si no se cumple con los criterios y rangos estipulados.
 
-Versión 4.0 Surgeon Elite
+Versión 5.0 Ultra-Cirujano
