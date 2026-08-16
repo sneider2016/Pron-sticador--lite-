@@ -30,10 +30,17 @@ class SALMEngine:
                 fecha=fecha,
                 local=loc_n,
                 visitante=vis_n,
-                market_ranking=[{"m": "🛑 FECHA INCORRECTA", "p": 0.0, "c": 999.0, "r": "Alto", "razon": "No hay partido oficial agendado."}],
-                main_prediction="🛑 NO HAY PARTIDO PROGRAMADO",
-                explanation=f"No se encontró partido oficial entre {loc_n} y {vis_n} para el {fecha}.",
-                alerts=[f"🛑 ATENCIÓN: Verifique la fecha oficial en el calendario."]
+                market_ranking=[{
+                    "m": "🛑 FECHA INCORRECTA O PARTIDO NO PROGRAMADO",
+                    "p": 0.0,
+                    "c": 999.0,
+                    "r": "Alto",
+                    "razon": f"No hay partido agendado entre {loc_n} y {vis_n} para el {fecha}."
+                }],
+                main_prediction="🛑 NO HAY PARTIDO PROGRAMADO PARA ESTA FECHA",
+                alternative_prediction="Ajuste la fecha en el calendario oficial.",
+                explanation=f"**Atención:** No se encontró ningún partido oficial agendado entre **{loc_n}** y **{vis_n}** para la fecha **{fecha}**.",
+                alerts=[f"🛑 ATENCIÓN: No existe un partido oficial agendado para el día {fecha}."]
             )
 
         h_id = fix["teams"]["home"]["id"] if fix else 0
@@ -60,6 +67,48 @@ class SALMEngine:
         analisis_raw = self.analyzer.analizar(datos_partido)
         alertas_finales = list(analisis_raw.get("alertas", []))
 
+        if not analisis_raw.get("datos_reales_ok", False):
+            return Match(
+                fixture_id=0,
+                liga=liga_final,
+                fecha=fecha,
+                local=loc_name,
+                visitante=vis_name,
+                market_ranking=[{
+                    "m": "🛑 DATOS INSUFICIENTES",
+                    "p": 0.0,
+                    "c": 999.0,
+                    "r": "Alto",
+                    "razon": "No se encontraron partidos reales en API-Football."
+                }],
+                main_prediction="🛑 PRONÓSTICO SUSPENDIDO POR FALTA DE DATOS",
+                explanation="No fue posible obtener el historial completo desde API-Football.",
+                alerts=alertas_finales
+            )
+
+        # AUDITORÍA DE ÁRBITRO
+        if referee_name:
+            alertas_finales.append(f"👨‍⚖️ Árbitro Designado: {referee_name} (Perfil disciplinario integrado al análisis).")
+        else:
+            alertas_finales.append("👨‍⚖️ Árbitro: Terna oficial aún por confirmar por la organización.")
+
+        # AUDITORÍA DE ALINEACIONES
+        lineups_raw = analisis_raw.get("lineups_data", [])
+        confirmados = 0
+        if lineups_raw and len(lineups_raw) >= 2:
+            for team_l in lineups_raw:
+                starters = team_l.get("startXI", []) or []
+                if len(starters) >= 7:
+                    confirmados += 1
+
+        if confirmados >= 2:
+            for team_l in lineups_raw:
+                tname = team_l.get("team", {}).get("name", "Equipo")
+                form = team_l.get("formation") or "N/A"
+                alertas_finales.append(f"✅ {tname}: 11 Inicial Confirmado ({form}).")
+        else:
+            alertas_finales.append("⚠️ Alineaciones oficiales aún no confirmadas. Análisis elaborado con formación proyectada.")
+
         probs = self.probability.calcular(
             ataque_local=analisis_raw["ataque_local"],
             defensa_local=analisis_raw["defensa_local"],
@@ -72,7 +121,9 @@ class SALMEngine:
             descanso_h=analisis_raw["descanso_h"],
             descanso_v=analisis_raw["descanso_v"],
             home_adv=analisis_raw["home_adv"],
-            es_eliminatoria=analisis_raw["es_eliminatoria"]
+            es_eliminatoria=analisis_raw["es_eliminatoria"],
+            btts_rate=analisis_raw["btts_rate"],
+            under25_rate=analisis_raw["under25_rate"]
         )
 
         es_liga_cerrojo = "argentina" in liga_final.lower() or "betplay" in liga_final.lower()
@@ -80,7 +131,7 @@ class SALMEngine:
 
         todos_mercados = []
 
-        # 1. Doble Oportunidad (Exige >= 68% y diferencial de ELO a favor)
+        # 1. Doble Chance con respaldo de ELO
         if probs["doble_chance_1x"] >= 68.0 and (analisis_raw["elo_h"] >= analisis_raw["elo_v"] - 80):
             todos_mercados.append({
                 "m": f"Gana o Empata {loc_name} (1X)",
@@ -93,42 +144,42 @@ class SALMEngine:
                 "m": f"Gana o Empata {vis_name} (X2)",
                 "p": probs["doble_chance_x2"],
                 "r": "Bajo",
-                "razon": f"Superioridad de jerarquía visitante ({int(analisis_raw['elo_v'])} ELO) que neutraliza la localía rival."
+                "razon": f"Jerarquía visitante ({int(analisis_raw['elo_v'])} ELO) que neutraliza la localía rival."
             })
 
-        # 2. Draw No Bet (DNB - Para cuotas de valor 1.70 - 2.05)
+        # 2. Draw No Bet (DNB)
         if probs["dnb_local"] >= 65.0:
             todos_mercados.append({
                 "m": f"Gana {loc_name} Sin Empate (DNB)",
                 "p": probs["dnb_local"],
                 "r": "Bajo-Medio",
-                "razon": "Dominio ofensivo local con seguro de reembolso ante empate."
+                "razon": "Dominio ofensivo local garantizando reembolso ante empate."
             })
         if probs["dnb_visitante"] >= 65.0:
             todos_mercados.append({
                 "m": f"Gana {vis_name} Sin Empate (DNB)",
                 "p": probs["dnb_visitante"],
                 "r": "Bajo-Medio",
-                "razon": "Métricas superiores del visitante con seguro de reembolso ante empate."
+                "razon": "Rendimiento visitante superior garantizando reembolso ante empate."
             })
 
-        # 3. Goles con Candado por Liga y Eliminatoria
-        umbral_over15 = 78.0 if es_liga_cerrojo else 70.0
-        if probs["over15"] >= umbral_over15:
+        # 3. Goles con candado para ligas de cerrojo
+        umbral_o15 = 78.0 if es_liga_cerrojo else 70.0
+        if probs["over15"] >= umbral_o15:
             todos_mercados.append({
                 "m": "Más de 1.5 Goles Totales",
                 "p": probs["over15"],
                 "r": "Bajo",
-                "razon": f"Expectativa de {probs['exp_goles']:.2f} goles con volumen ofensivo confirmado."
+                "razon": f"Expectativa de {probs['exp_goles']:.2f} goles con alta probabilidad de marcadores abiertos."
             })
 
-        # Under 3.5 PROHIBIDO en fases previas de Champions/Conference de alta volatilidad
+        # Under 3.5 bloqueado en eliminatorias directas
         if probs["under35"] >= 72.0 and not es_eliminatoria:
             todos_mercados.append({
                 "m": "Menos de 3.5 Goles Totales",
                 "p": probs["under35"],
                 "r": "Bajo",
-                "razon": f"Partido de liga regular con baja densidad goleadora esperada ({probs['exp_goles']:.2f} goles)."
+                "razon": f"Partido de liga regular con baja densidad goleadora ({probs['exp_goles']:.2f} goles esperados)."
             })
 
         todos_mercados.sort(key=lambda x: x["p"], reverse=True)
@@ -136,22 +187,25 @@ class SALMEngine:
             cand["c"] = self.value.cuota_justa(cand["p"])
 
         if not todos_mercados:
-            p_top = {"m": "🛑 NO APOSTAR (Riesgo / Sin Valor Claro)", "p": 0.0, "c": 999.0, "r": "Alto", "razon": "Ningún mercado superó los filtros de seguridad estricta."}
+            alertas_finales.append("🛑 RITMO INCIERTO / ALTA VARIANZA: Ningún mercado superó los filtros estrictos de seguridad. Se recomienda no apostar.")
+            p_top = {"m": "🛑 RITMO INCIERTO (Sin Mercado Seguro)", "p": 0.0, "c": 999.0, "r": "Alto", "razon": "Ningún mercado alcanzó los filtros de seguridad estricta."}
             s_top = p_top
             ranking_final = [p_top]
         elif len(todos_mercados) == 1:
             p_top = todos_mercados[0]
-            s_top = {"m": "🛑 NINGUNO ADICIONAL", "p": 0.0, "c": 999.0, "r": "N/A", "razon": "Solo un mercado cumplió con la seguridad requerida."}
+            s_top = {"m": "🛑 NINGUNO ADICIONAL", "p": 0.0, "c": 999.0, "r": "N/A", "razon": "Únicamente el Pronóstico Principal cumplió con los filtros de seguridad."}
             ranking_final = [p_top, s_top]
         else:
             p_top = todos_mercados[0]
             s_top = todos_mercados[1]
             ranking_final = todos_mercados
 
+        ref_arg = f" | Árbitro: {referee_name}" if referee_name else ""
         arg = (
             f"**1. Jerarquía ELO Real:** {loc_name} ({int(analisis_raw['elo_h'])}) vs {vis_name} ({int(analisis_raw['elo_v'])}).\n\n"
-            f"**2. Expectativa Goleadora:** Gol Local: {probs['lambda_local']:.2f} | Gol Visita: {probs['lambda_visitante']:.2f} (Total: {probs['exp_goles']:.2f}).\n\n"
-            f"**3. Contexto de Competición:** {liga_final} {'(Eliminatoria Directa - Alta Volatilidad)' if es_eliminatoria else '(Liga Regular)'}."
+            f"**2. Proyección Poisson Bivariada:** Gol Local: {probs['lambda_local']:.2f} | Gol Visita: {probs['lambda_visitante']:.2f} (Total: {probs['exp_goles']:.2f} esperados).\n\n"
+            f"**3. Contexto Táctico & Disciplina:** Córneres Est: {analisis_raw['corners_est']:.1f} | Tarjetas Est: {analisis_raw['tarjetas_est']:.1f}{ref_arg} | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
+            f"**4. Competición:** {liga_final} {'(Eliminatoria Directa - Alta Volatilidad)' if es_eliminatoria else '(Liga Regular)'}."
         )
 
         return Match(
@@ -162,6 +216,7 @@ class SALMEngine:
             fecha=fecha,
             local=loc_name,
             visitante=vis_name,
+            h2h=analisis_raw["h2h"],
             analyzed_markets=todos_mercados,
             market_ranking=ranking_final,
             main_prediction=p_top["m"],
