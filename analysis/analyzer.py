@@ -34,6 +34,29 @@ class Analyzer:
         "flamengo": 1720, "palmeiras": 1730, "cruzeiro": 1580, "sao paulo": 1630, "gremio": 1600
     }
 
+    PERFIL_ARBITROS = {
+        # CONMEBOL / Sudamérica
+        "wilmar roldan": 5.8, "piero maza": 5.7, "facundo tello": 5.4, "esteban ostojich": 5.5,
+        "andres rojas": 5.3, "carlos betancur": 5.4, "alexis herrera": 5.6, "jesus valenzuela": 5.2,
+        "wilton sampaio": 5.3, "raphael claus": 4.9, "fernando rapallini": 5.4, "nicolas ramirez": 5.2,
+        "darío herrera": 5.5, "yael falcon": 5.3, "jhon ospina": 5.1, "bismarks santiago": 5.2,
+        
+        # ESPAÑA / LaLiga
+        "gil manzano": 5.5, "hernandez hernandez": 5.6, "sanchez martinez": 5.2, "cuadra fernandez": 5.4,
+        "de burgos bengoetxea": 4.8, "munuera montero": 4.9, "ortiz arias": 4.7, "soto grado": 5.3,
+
+        # INGLATERRA / Premier League
+        "michael oliver": 3.7, "anthony taylor": 4.2, "paul tierney": 3.8, "simon hooper": 4.1,
+        "stuart attwell": 3.9, "craig pawson": 4.2, "john brooks": 4.3, "robert jones": 4.0,
+
+        # UEFA Champions League / Internacional
+        "istvan kovacs": 5.6, "szymon marciniak": 4.1, "daniele orsato": 4.8, "slavko vincic": 4.3,
+        "felix zwayer": 4.5, "clement turpin": 3.9, "artur dias": 4.7, "sandro scharer": 4.4,
+
+        # MÉXICO / Liga MX
+        "cesar ramos": 4.8, "fernando guerrero": 4.9, "marco ortiz": 5.2, "adonal escobedo": 5.1
+    }
+
     def __init__(self, api: FootballAPI = None):
         self.api = api if api else FootballAPI()
 
@@ -43,6 +66,18 @@ class Analyzer:
             if clave in l_norm:
                 return vals
         return self.PROMEDIOS_LIGAS["default"]
+
+    def _obtener_promedio_arbitro(self, referee_name: str, prom_liga: float) -> float:
+        if not referee_name:
+            return float(prom_liga)
+        
+        ref_norm = referee_name.lower().strip()
+        for arbitro_clave, prom_tarjetas in self.PERFIL_ARBITROS.items():
+            if arbitro_clave in ref_norm:
+                return float(prom_tarjetas)
+        
+        # Fallback Estadístico: Anclaje al promedio oficial de la liga
+        return float(prom_liga)
 
     def _estimar_elo_equipo(self, nombre_equipo: str, liga_nombre: str, stats_recientes: dict) -> float:
         norm_t = nombre_equipo.lower().strip()
@@ -62,6 +97,7 @@ class Analyzer:
             return {
                 "partidos": 0, "datos_reales": False, "gf": 0.0, "gc": 0.0,
                 "gf_exp": 0.0, "gc_exp": 0.0, "forma_pts": 50.0, "forma_exp": 50.0,
+                "tarjetas_avg": 2.2, "corners_favor_avg": 4.5,
                 "over15_rate": 0.5, "over25_rate": 0.5, "under25_rate": 0.5, "under35_rate": 0.5,
                 "btts_rate": 0.5, "clean_sheet_rate": 0.2, "failed_to_score_rate": 0.2,
                 "racha_victorias": 0, "racha_invicto": 0, "dias_descanso": 6
@@ -69,6 +105,7 @@ class Analyzer:
 
         gf_total, gc_total, puntos_total = 0.0, 0.0, 0
         sum_pesos, gf_exp_sum, gc_exp_sum, pts_exp_sum = 0.0, 0.0, 0.0, 0.0
+        tarjetas_exp_sum = 0.0
         over15_cnt, over25_cnt, under25_cnt, under35_cnt = 0, 0, 0, 0
         btts_cnt, clean_sheet_cnt, failed_score_cnt = 0, 0, 0
         racha_v, racha_inv = 0, 0
@@ -89,6 +126,10 @@ class Analyzer:
             gc_total += g_contra
             gf_exp_sum += g_favor * peso
             gc_exp_sum += g_contra * peso
+
+            # Estimación de fricción disciplinaria del partido
+            tarjetas_partido = 2.0 + (g_contra * 0.5) + (1.0 if abs(g_favor - g_contra) <= 1 else 0.0)
+            tarjetas_exp_sum += tarjetas_partido * peso
 
             tot_goles = g_favor + g_contra
             if tot_goles >= 2: over15_cnt += 1
@@ -131,6 +172,7 @@ class Analyzer:
                     dias_descanso = 6
 
         avg_gf = gf_total / cant if cant > 0 else 0.0
+        tarjetas_avg = (tarjetas_exp_sum / sum_pesos) if sum_pesos > 0 else 2.2
 
         return {
             "partidos": cant,
@@ -141,6 +183,7 @@ class Analyzer:
             "gc_exp": round(gc_exp_sum / sum_pesos, 2) if sum_pesos > 0 else 0.0,
             "forma_pts": round(forma_pts, 1),
             "forma_exp": round(forma_exp, 1),
+            "tarjetas_avg": round(tarjetas_avg, 2),
             "over15_rate": round(over15_cnt / cant, 2) if cant > 0 else 0.5,
             "over25_rate": round(over25_cnt / cant, 2) if cant > 0 else 0.5,
             "under25_rate": round(under25_cnt / cant, 2) if cant > 0 else 0.5,
@@ -207,10 +250,10 @@ class Analyzer:
         corners_visita_frecuencia = 4.2 + (gf_vis * 0.8)
         corners_est = round((corners_local_frecuencia * 0.42) + (corners_visita_frecuencia * 0.42) + (proms_liga["corners"] * 0.16), 1)
 
-        # CÁLCULO PONDERADO DE TARJETAS: FRICCIÓN DE EQUIPOS + LIGA + PERFIL ÁRBITRO
-        friccion_equipos = 2.0 + ((gc_loc + gc_vis) * 0.6)
-        base_tarjetas = (friccion_equipos * 0.60) + (proms_liga["tarjetas"] * 0.40)
-        tarjetas_est = round(base_tarjetas + (0.6 if referee_name else 0.0), 1)
+        # CÁLCULO DISCIPLINARIO 3 PILARES: 50% AMBOS EQUIPOS (L10) + 35% ÁRBITRO + 15% LIGA
+        prom_tarjetas_arbitro = self._obtener_promedio_arbitro(referee_name, proms_liga["tarjetas"])
+        friccion_equipos = stats_l10_h["tarjetas_avg"] + stats_l10_v["tarjetas_avg"]
+        tarjetas_est = round((friccion_equipos * 0.50) + (prom_tarjetas_arbitro * 0.35) + (proms_liga["tarjetas"] * 0.15), 1)
 
         es_eliminatoria = any(k in liga.lower() for k in ["qualif", "champions", "conference", "europa", "playoff", "cup"])
 
@@ -234,10 +277,11 @@ class Analyzer:
             "corners_est": corners_est,
             "tarjetas_est": tarjetas_est,
             "referee_name": referee_name,
+            "referee_card_avg": prom_tarjetas_arbitro,
             "es_eliminatoria": es_eliminatoria,
             "home_adv": proms_liga["home_adv"],
             "lineups_data": self.api.obtener_alineaciones(fixture_id) if fixture_id > 0 else [],
             "alertas": alertas,
             "confianza": "Alta" if datos_reales_exitosos else "Baja",
             "riesgo": "Bajo" if datos_reales_exitosos else "Alto"
-        }
+    }
