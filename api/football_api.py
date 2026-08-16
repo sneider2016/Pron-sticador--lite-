@@ -16,8 +16,6 @@ class FootballAPI:
 
     def consultar(self, endpoint: str, parametros: dict) -> list:
         url = f"https://{HOST}/{endpoint}"
-        
-        # BLINDAJE DE VELOCIDAD: Pausa de 1.2 segundos entre consultas
         time.sleep(1.2)
 
         try:
@@ -74,7 +72,6 @@ class FootballAPI:
                     t_name = t_info.get("name", "")
                     t_norm = normalizar(t_name)
 
-                    # Filtrar equipos femeniles/juveniles si el usuario no los pidió expresamente
                     es_juvenil_api = any(w in t_norm for w in palabras_bloqueo) or t_norm.endswith(" w")
                     if es_juvenil_api and not es_juvenil_input:
                         continue
@@ -116,7 +113,6 @@ class FootballAPI:
                 l_norm = normalizar(l_api)
                 v_norm = normalizar(v_api)
 
-                # Filtrar partidos femeniles o juveniles si el usuario busca fútbol masculino
                 es_juvenil_api = any(w in (l_norm + " " + v_norm) for w in palabras_bloqueo) or l_norm.endswith(" w") or v_norm.endswith(" w")
                 if es_juvenil_api and not es_juvenil_input:
                     continue
@@ -135,7 +131,6 @@ class FootballAPI:
                 mejor_match["referee_name"] = referee if referee else ""
                 return mejor_match
 
-        # Si el partido no está programado en esa fecha exacta, devuelve id: 0 para activar la regla de seguridad
         eq_loc = self.buscar_equipo_por_nombre(local)
         eq_vis = self.buscar_equipo_por_nombre(visitante)
 
@@ -209,8 +204,32 @@ class FootballAPI:
             return []
         return self.consultar("fixtures/statistics", {"fixture": fixture_id})
 
+    def obtener_corners_recientes_equipo(self, fixtures_recientes: list, team_id: int, max_partidos: int = 3) -> float:
+        """Extrae el promedio de córneres reales de los últimos partidos del equipo."""
+        if not fixtures_recientes or not team_id:
+            return 0.0
+        
+        corners_total = 0
+        partidos_auditados = 0
+
+        for f in fixtures_recientes[:max_partidos]:
+            fix_id = f.get("fixture", {}).get("id", 0)
+            if not fix_id:
+                continue
+            stats_raw = self.estadisticas_fixture(fix_id)
+            if stats_raw:
+                for team_block in stats_raw:
+                    if team_block.get("team", {}).get("id") == team_id:
+                        for s in team_block.get("statistics", []):
+                            if s.get("type") == "Corner Kicks" and s.get("value") is not None:
+                                corners_total += s.get("value")
+                                partidos_auditados += 1
+        
+        if partidos_auditados > 0:
+            return round(corners_total / partidos_auditados, 1)
+        return 0.0
+
     def obtener_estadisticas_temporada_equipo(self, team_id: int, league_id: int, season: int) -> dict:
-        """Consulta estadísticas reales de tarjetas y partidos acumulados en la temporada desde la API."""
         if not team_id or not league_id:
             return {}
         res = self.consultar("teams/statistics", {"team": team_id, "league": league_id, "season": season})
