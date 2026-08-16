@@ -70,14 +70,36 @@ class Analyzer:
     def _obtener_promedio_arbitro(self, referee_name: str, prom_liga: float) -> float:
         if not referee_name:
             return float(prom_liga)
-        
         ref_norm = referee_name.lower().strip()
         for arbitro_clave, prom_tarjetas in self.PERFIL_ARBITROS.items():
             if arbitro_clave in ref_norm:
                 return float(prom_tarjetas)
-        
-        # Fallback Estadístico: Anclaje al promedio oficial de la liga
+        # Anclaje estadístico por liga para árbitros no listados
         return float(prom_liga)
+
+    def _extraer_tarjetas_reales_equipo(self, stats_api: dict) -> float:
+        """Extrae el conteo real de tarjetas por partido desde la API."""
+        if not stats_api or not isinstance(stats_api, dict):
+            return 0.0
+        
+        cards = stats_api.get("cards", {})
+        yellow_dict = cards.get("yellow", {})
+        red_dict = cards.get("red", {})
+
+        tot_y = 0
+        for k, v in yellow_dict.items():
+            if isinstance(v, dict) and v.get("total") is not None:
+                tot_y += v["total"]
+
+        tot_r = 0
+        for k, v in red_dict.items():
+            if isinstance(v, dict) and v.get("total") is not None:
+                tot_r += v["total"]
+
+        partidos_jugados = stats_api.get("fixtures", {}).get("played", {}).get("total", 0)
+        if partidos_jugados and partidos_jugados > 0:
+            return round((tot_y + (tot_r * 1.5)) / partidos_jugados, 2)
+        return 0.0
 
     def _estimar_elo_equipo(self, nombre_equipo: str, liga_nombre: str, stats_recientes: dict) -> float:
         norm_t = nombre_equipo.lower().strip()
@@ -97,7 +119,6 @@ class Analyzer:
             return {
                 "partidos": 0, "datos_reales": False, "gf": 0.0, "gc": 0.0,
                 "gf_exp": 0.0, "gc_exp": 0.0, "forma_pts": 50.0, "forma_exp": 50.0,
-                "tarjetas_avg": 2.2, "corners_favor_avg": 4.5,
                 "over15_rate": 0.5, "over25_rate": 0.5, "under25_rate": 0.5, "under35_rate": 0.5,
                 "btts_rate": 0.5, "clean_sheet_rate": 0.2, "failed_to_score_rate": 0.2,
                 "racha_victorias": 0, "racha_invicto": 0, "dias_descanso": 6
@@ -105,7 +126,6 @@ class Analyzer:
 
         gf_total, gc_total, puntos_total = 0.0, 0.0, 0
         sum_pesos, gf_exp_sum, gc_exp_sum, pts_exp_sum = 0.0, 0.0, 0.0, 0.0
-        tarjetas_exp_sum = 0.0
         over15_cnt, over25_cnt, under25_cnt, under35_cnt = 0, 0, 0, 0
         btts_cnt, clean_sheet_cnt, failed_score_cnt = 0, 0, 0
         racha_v, racha_inv = 0, 0
@@ -126,10 +146,6 @@ class Analyzer:
             gc_total += g_contra
             gf_exp_sum += g_favor * peso
             gc_exp_sum += g_contra * peso
-
-            # Estimación de fricción disciplinaria del partido
-            tarjetas_partido = 2.0 + (g_contra * 0.5) + (1.0 if abs(g_favor - g_contra) <= 1 else 0.0)
-            tarjetas_exp_sum += tarjetas_partido * peso
 
             tot_goles = g_favor + g_contra
             if tot_goles >= 2: over15_cnt += 1
@@ -172,7 +188,6 @@ class Analyzer:
                     dias_descanso = 6
 
         avg_gf = gf_total / cant if cant > 0 else 0.0
-        tarjetas_avg = (tarjetas_exp_sum / sum_pesos) if sum_pesos > 0 else 2.2
 
         return {
             "partidos": cant,
@@ -183,7 +198,6 @@ class Analyzer:
             "gc_exp": round(gc_exp_sum / sum_pesos, 2) if sum_pesos > 0 else 0.0,
             "forma_pts": round(forma_pts, 1),
             "forma_exp": round(forma_exp, 1),
-            "tarjetas_avg": round(tarjetas_avg, 2),
             "over15_rate": round(over15_cnt / cant, 2) if cant > 0 else 0.5,
             "over25_rate": round(over25_cnt / cant, 2) if cant > 0 else 0.5,
             "under25_rate": round(under25_cnt / cant, 2) if cant > 0 else 0.5,
@@ -200,6 +214,7 @@ class Analyzer:
         home_id = datos_partido.get("home_id", 0)
         away_id = datos_partido.get("away_id", 0)
         fixture_id = datos_partido.get("fixture_id", 0)
+        league_id = datos_partido.get("league_id", 0)
         home_name = datos_partido.get("home_name", "")
         away_name = datos_partido.get("away_name", "")
         liga = datos_partido.get("liga", "")
@@ -245,15 +260,24 @@ class Analyzer:
         gf_vis = stats_l10_v["gf_exp"]
         gc_vis = stats_l10_v["gc_exp"]
 
-        # CÁLCULO PONDERADO DE CÓRNERES: EQUIPOS (84%) + LIGA (16%)
+        # CÓRNERES: PROYECCIÓN PONDERADA 84% EQUIPOS + 16% LIGA
         corners_local_frecuencia = 5.2 + (gf_loc * 0.9)
         corners_visita_frecuencia = 4.2 + (gf_vis * 0.8)
         corners_est = round((corners_local_frecuencia * 0.42) + (corners_visita_frecuencia * 0.42) + (proms_liga["corners"] * 0.16), 1)
 
-        # CÁLCULO DISCIPLINARIO 3 PILARES: 50% AMBOS EQUIPOS (L10) + 35% ÁRBITRO + 15% LIGA
+        # TARJETAS 100% REALES DESDE LA BASE DE DATOS DE LA API
+        stats_temporada_h = self.api.obtener_estadisticas_temporada_equipo(home_id, league_id, season) if league_id else {}
+        stats_temporada_v = self.api.obtener_estadisticas_temporada_equipo(away_id, league_id, season) if league_id else {}
+
+        tarjetas_reales_h = self._extraer_tarjetas_reales_equipo(stats_temporada_h)
+        tarjetas_reales_v = self._extraer_tarjetas_reales_equipo(stats_temporada_v)
+
         prom_tarjetas_arbitro = self._obtener_promedio_arbitro(referee_name, proms_liga["tarjetas"])
-        friccion_equipos = stats_l10_h["tarjetas_avg"] + stats_l10_v["tarjetas_avg"]
-        tarjetas_est = round((friccion_equipos * 0.50) + (prom_tarjetas_arbitro * 0.35) + (proms_liga["tarjetas"] * 0.15), 1)
+
+        if tarjetas_reales_h > 0 and tarjetas_reales_v > 0:
+            tarjetas_est = round((tarjetas_reales_h + tarjetas_reales_v) * 0.85 + (prom_tarjetas_arbitro * 0.15), 1)
+        else:
+            tarjetas_est = round((proms_liga["tarjetas"] * 0.70) + (prom_tarjetas_arbitro * 0.30), 1)
 
         es_eliminatoria = any(k in liga.lower() for k in ["qualif", "champions", "conference", "europa", "playoff", "cup"])
 
@@ -284,4 +308,4 @@ class Analyzer:
             "alertas": alertas,
             "confianza": "Alta" if datos_reales_exitosos else "Baja",
             "riesgo": "Bajo" if datos_reales_exitosos else "Alto"
-    }
+        }
