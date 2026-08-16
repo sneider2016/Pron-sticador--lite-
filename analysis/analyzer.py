@@ -23,7 +23,6 @@ class Analyzer:
         "default": {"goles": 2.50, "corners": 9.5, "tarjetas": 4.3, "home_adv": 0.30, "elo_base": 1500}
     }
 
-    # Jerarquías especiales de clubes para evitar trampas tipo Excelsior vs PSV
     ELOS_CLUBES_ELITE = {
         "psv": 1820, "ajax": 1740, "feyenoord": 1760, "excelsior": 1410,
         "real madrid": 1950, "barcelona": 1920, "sevilla": 1680, "rayo vallecano": 1590,
@@ -53,8 +52,6 @@ class Analyzer:
 
         proms = self._obtener_promedios_liga(liga_nombre)
         elo_base = proms.get("elo_base", 1500.0)
-
-        # Ajuste dinámico según forma reciente y diferencial de gol
         forma_pts = stats_recientes.get("forma_pts", 50.0)
         dg = stats_recientes.get("gf", 1.0) - stats_recientes.get("gc", 1.0)
         elo_ajustado = elo_base + ((forma_pts - 50.0) * 2.5) + (dg * 30.0)
@@ -63,22 +60,21 @@ class Analyzer:
     def _procesar_historial_ponderado(self, partidos: list, team_id: int) -> dict:
         if not partidos or not team_id:
             return {
-                "partidos": 0,
-                "datos_reales": False,
-                "gf": 0.0,
-                "gc": 0.0,
-                "forma_pts": 50.0,
-                "forma_exp": 50.0,
-                "volumen_ofensivo_real": 3.5,
-                "under25_rate": 0.5,
-                "over15_rate": 0.5,
-                "btts_rate": 0.5,
-                "dias_descanso": 6
+                "partidos": 0, "datos_reales": False, "gf": 0.0, "gc": 0.0,
+                "gf_exp": 0.0, "gc_exp": 0.0, "forma_pts": 50.0, "forma_exp": 50.0,
+                "xg_avg": 1.0, "tiros_avg": 10.0, "tiros_puerta_avg": 3.8,
+                "corners_favor_avg": 4.5, "tarjetas_avg": 2.0, "over15_rate": 0.5,
+                "over25_rate": 0.5, "under25_rate": 0.5, "under35_rate": 0.5,
+                "btts_rate": 0.5, "clean_sheet_rate": 0.2, "failed_to_score_rate": 0.2,
+                "racha_victorias": 0, "racha_invicto": 0, "dias_descanso": 6
             }
 
         gf_total, gc_total, puntos_total = 0.0, 0.0, 0
         sum_pesos, gf_exp_sum, gc_exp_sum, pts_exp_sum = 0.0, 0.0, 0.0, 0.0
-        over15_cnt, under25_cnt, btts_cnt = 0, 0, 0
+        over15_cnt, over25_cnt, under25_cnt, under35_cnt = 0, 0, 0, 0
+        btts_cnt, clean_sheet_cnt, failed_score_cnt = 0, 0, 0
+        racha_v, racha_inv = 0, 0
+        eval_v, eval_inv = True, True
 
         for idx, partido in enumerate(partidos):
             peso = math.exp(-0.12 * idx)
@@ -96,17 +92,27 @@ class Analyzer:
             gf_exp_sum += g_favor * peso
             gc_exp_sum += g_contra * peso
 
-            tot_g = g_favor + g_contra
-            if tot_g >= 2: over15_cnt += 1
-            if tot_g <= 2: under25_cnt += 1
+            tot_goles = g_favor + g_contra
+            if tot_goles >= 2: over15_cnt += 1
+            if tot_goles >= 3: over25_cnt += 1
+            if tot_goles <= 2: under25_cnt += 1
+            if tot_goles <= 3: under35_cnt += 1
             if g_favor > 0 and g_contra > 0: btts_cnt += 1
+            if g_contra == 0: clean_sheet_cnt += 1
+            if g_favor == 0: failed_score_cnt += 1
 
             if g_favor > g_contra:
                 pts = 3
+                if eval_v: racha_v += 1
+                if eval_inv: racha_inv += 1
             elif g_favor == g_contra:
                 pts = 1
+                eval_v = False
+                if eval_inv: racha_inv += 1
             else:
                 pts = 0
+                eval_v = False
+                eval_inv = False
 
             puntos_total += pts
             pts_exp_sum += pts * peso
@@ -127,20 +133,25 @@ class Analyzer:
                     dias_descanso = 6
 
         avg_gf = gf_total / cant if cant > 0 else 0.0
-        avg_gc = gc_total / cant if cant > 0 else 0.0
 
         return {
             "partidos": cant,
             "datos_reales": True,
             "gf": round(avg_gf, 2),
-            "gc": round(avg_gc, 2),
+            "gc": round(gc_total / cant, 2) if cant > 0 else 0.0,
             "gf_exp": round(gf_exp_sum / sum_pesos, 2) if sum_pesos > 0 else 0.0,
             "gc_exp": round(gc_exp_sum / sum_pesos, 2) if sum_pesos > 0 else 0.0,
             "forma_pts": round(forma_pts, 1),
             "forma_exp": round(forma_exp, 1),
             "over15_rate": round(over15_cnt / cant, 2) if cant > 0 else 0.5,
+            "over25_rate": round(over25_cnt / cant, 2) if cant > 0 else 0.5,
             "under25_rate": round(under25_cnt / cant, 2) if cant > 0 else 0.5,
+            "under35_rate": round(under35_cnt / cant, 2) if cant > 0 else 0.5,
             "btts_rate": round(btts_cnt / cant, 2) if cant > 0 else 0.5,
+            "clean_sheet_rate": round(clean_sheet_cnt / cant, 2) if cant > 0 else 0.2,
+            "failed_to_score_rate": round(failed_score_cnt / cant, 2) if cant > 0 else 0.2,
+            "racha_victorias": racha_v,
+            "racha_invicto": racha_inv,
             "dias_descanso": dias_descanso
         }
 
@@ -167,41 +178,54 @@ class Analyzer:
 
         if not stats_l10_h.get("datos_reales") or not stats_l10_v.get("datos_reales"):
             datos_reales_exitosos = False
-            alertas.append("🛑 ATENCIÓN: Historial incompleto en API-Football. Análisis con datos base.")
+            err_msg = f" DETALLE DE LA API: {self.api.ultimo_error}" if self.api.ultimo_error else ""
+            alertas.append(f"🛑 ATENCIÓN: No se encontraron partidos reales en API-Football.{err_msg}")
 
-        # CÁLCULO ELO DINÁMICO REAL
+        # ELO DINÁMICO
         elo_h = self._estimar_elo_equipo(home_name, liga, stats_l10_h)
         elo_v = self._estimar_elo_equipo(away_name, liga, stats_l10_v)
 
-        h2h_raw = self.api.head_to_head(home_id, away_id, 8) if (home_id and away_id) else []
+        h2h_raw = self.api.head_to_head(home_id, away_id, 10) if (home_id and away_id) else []
+        h2h_btts = 0
         h2h_goles_total = 0.0
+
         if h2h_raw:
             for m in h2h_raw:
                 gh = m.get("goals", {}).get("home") or 0
                 ga = m.get("goals", {}).get("away") or 0
+                if gh > 0 and ga > 0: h2h_btts += 1
                 h2h_goles_total += (gh + ga)
             prom_goles_h2h = h2h_goles_total / len(h2h_raw)
         else:
             prom_goles_h2h = stats_l10_h["gf"] + stats_l10_v["gf"]
 
-        corners_est = round(proms_liga["corners"], 1)
-        tarjetas_est = round(proms_liga["tarjetas"] + (0.5 if referee_name else 0.0), 1)
+        gf_loc = stats_l10_h["gf_exp"]
+        gc_loc = stats_l10_h["gc_exp"]
+        gf_vis = stats_l10_v["gf_exp"]
+        gc_vis = stats_l10_v["gc_exp"]
 
-        # DETECTOR DE ELIMINATORIA / VOLATILIDAD
+        corners_est = round(proms_liga["corners"], 1)
+        base_tarjetas = proms_liga["tarjetas"]
+        tarjetas_est = round(base_tarjetas + (0.5 if referee_name else 0.0), 1)
+
         es_eliminatoria = any(k in liga.lower() for k in ["qualif", "champions", "conference", "europa", "playoff", "cup"])
 
         return {
             "datos_reales_ok": datos_reales_exitosos,
-            "ataque_local": stats_l10_h["gf_exp"],
-            "defensa_local": stats_l10_h["gc_exp"],
-            "ataque_visitante": stats_l10_v["gf_exp"],
-            "defensa_visitante": stats_l10_v["gc_exp"],
+            "ataque_local": round(gf_loc, 2),
+            "defensa_local": round(gc_loc, 2),
+            "ataque_visitante": round(gf_vis, 2),
+            "defensa_visitante": round(gc_vis, 2),
             "forma_local": stats_l10_h["forma_exp"],
             "forma_visitante": stats_l10_v["forma_exp"],
             "elo_h": elo_h,
             "elo_v": elo_v,
             "descanso_h": stats_l10_h["dias_descanso"],
             "descanso_v": stats_l10_v["dias_descanso"],
+            "btts_rate": round((stats_l10_h["btts_rate"] + stats_l10_v["btts_rate"]) / 2.0, 2),
+            "under25_rate": round((stats_l10_h["under25_rate"] + stats_l10_v["under25_rate"]) / 2.0, 2),
+            "h2h": h2h_raw,
+            "h2h_btts": h2h_btts,
             "prom_goles_h2h": round(prom_goles_h2h, 2),
             "corners_est": corners_est,
             "tarjetas_est": tarjetas_est,
@@ -212,4 +236,4 @@ class Analyzer:
             "alertas": alertas,
             "confianza": "Alta" if datos_reales_exitosos else "Baja",
             "riesgo": "Bajo" if datos_reales_exitosos else "Alto"
-                    }
+        }
