@@ -40,7 +40,7 @@ class SALMEngine:
                 main_prediction="🛑 NO HAY PARTIDO PROGRAMADO PARA ESTA FECHA",
                 alternative_prediction="Ajuste la fecha en el calendario oficial.",
                 explanation=f"**Atención:** No se encontró ningún partido oficial agendado entre **{loc_n}** y **{vis_n}** para la fecha **{fecha}**.",
-                alerts=[f"🛑 ATENCIÓN: No existe un partido oficial agendado para el día {fecha}."]
+                alerts=[f"🛑 ATENCIÓN: Verifique la fecha oficial en el calendario."]
             )
 
         h_id = fix["teams"]["home"]["id"] if fix else 0
@@ -107,7 +107,7 @@ class SALMEngine:
                 form = team_l.get("formation") or "N/A"
                 alertas_finales.append(f"✅ {tname}: 11 Inicial Confirmado ({form}).")
         else:
-            alertas_finales.append("⚠️ Alineaciones oficiales aún no confirmadas. Análisis elaborado con formación proyectada.")
+            alertas_finales.append("⚠️ Alineaciones oficiales aún no confirmadas. Análisis con alineación proyectada.")
 
         probs = self.probability.calcular(
             ataque_local=analisis_raw["ataque_local"],
@@ -128,66 +128,109 @@ class SALMEngine:
 
         es_liga_cerrojo = "argentina" in liga_final.lower() or "betplay" in liga_final.lower()
         es_eliminatoria = analisis_raw["es_eliminatoria"]
+        corners_est = analisis_raw["corners_est"]
+        tarjetas_est = analisis_raw["tarjetas_est"]
 
         todos_mercados = []
 
-        # 1. Doble Chance con respaldo de ELO
+        # 1. DOBLE OPORTUNIDAD (1X / X2)
         if probs["doble_chance_1x"] >= 68.0 and (analisis_raw["elo_h"] >= analisis_raw["elo_v"] - 80):
             todos_mercados.append({
                 "m": f"Gana o Empata {loc_name} (1X)",
                 "p": probs["doble_chance_1x"],
                 "r": "Bajo",
-                "razon": f"Cobertura local sólida respaldada por ELO ({int(analisis_raw['elo_h'])} vs {int(analisis_raw['elo_v'])})."
+                "razon": f"Cobertura local sólida ({probs['doble_chance_1x']}%) respaldada por ELO ({int(analisis_raw['elo_h'])} vs {int(analisis_raw['elo_v'])})."
             })
         if probs["doble_chance_x2"] >= 68.0 and (analisis_raw["elo_v"] >= analisis_raw["elo_h"] - 80):
             todos_mercados.append({
                 "m": f"Gana o Empata {vis_name} (X2)",
                 "p": probs["doble_chance_x2"],
                 "r": "Bajo",
-                "razon": f"Jerarquía visitante ({int(analisis_raw['elo_v'])} ELO) que neutraliza la localía rival."
+                "razon": f"Jerarquía visitante ({int(analisis_raw['elo_v'])} ELO) que neutraliza la localía rival ({probs['doble_chance_x2']}%)."
             })
 
-        # 2. Draw No Bet (DNB)
-        if probs["dnb_local"] >= 65.0:
+        # 2. DRAW NO BET (DNB / EMPATE NO VÁLIDO)
+        if probs["dnb_local"] >= 65.0 and (analisis_raw["elo_h"] >= analisis_raw["elo_v"]):
             todos_mercados.append({
                 "m": f"Gana {loc_name} Sin Empate (DNB)",
                 "p": probs["dnb_local"],
                 "r": "Bajo-Medio",
-                "razon": "Dominio ofensivo local garantizando reembolso ante empate."
+                "razon": f"Dominio ofensivo local ({probs['dnb_local']}%) garantizando reembolso completo ante empate."
             })
-        if probs["dnb_visitante"] >= 65.0:
+        if probs["dnb_visitante"] >= 65.0 and (analisis_raw["elo_v"] >= analisis_raw["elo_h"]):
             todos_mercados.append({
                 "m": f"Gana {vis_name} Sin Empate (DNB)",
                 "p": probs["dnb_visitante"],
                 "r": "Bajo-Medio",
-                "razon": "Rendimiento visitante superior garantizando reembolso ante empate."
+                "razon": f"Métricas superiores del visitante ({probs['dnb_visitante']}%) garantizando reembolso ante empate."
             })
 
-        # 3. Goles con candado para ligas de cerrojo
+        # 3. GOLES (OVER / UNDER)
         umbral_o15 = 78.0 if es_liga_cerrojo else 70.0
         if probs["over15"] >= umbral_o15:
             todos_mercados.append({
                 "m": "Más de 1.5 Goles Totales",
                 "p": probs["over15"],
                 "r": "Bajo",
-                "razon": f"Expectativa de {probs['exp_goles']:.2f} goles con alta probabilidad de marcadores abiertos."
+                "razon": f"Expectativa de {probs['exp_goles']:.2f} goles con alta probabilidad de marcadores abiertos ({probs['over15']}%)."
             })
 
-        # Under 3.5 bloqueado en eliminatorias directas
         if probs["under35"] >= 72.0 and not es_eliminatoria:
             todos_mercados.append({
                 "m": "Menos de 3.5 Goles Totales",
                 "p": probs["under35"],
                 "r": "Bajo",
-                "razon": f"Partido de liga regular con baja densidad goleadora ({probs['exp_goles']:.2f} goles esperados)."
+                "razon": f"Partido de liga regular con baja densidad goleadora esperada ({probs['exp_goles']:.2f} goles - {probs['under35']}%)."
             })
 
+        if probs["under25"] >= 70.0 and not es_eliminatoria and es_liga_cerrojo:
+            todos_mercados.append({
+                "m": "Menos de 2.5 Goles Totales (Under 2.5)",
+                "p": probs["under25"],
+                "r": "Bajo-Medio",
+                "razon": f"Trámite de alta fricción táctica y baja expectativa ({probs['exp_goles']:.2f} goles - {probs['under25']}%)."
+            })
+
+        # 4. AMBOS EQUIPOS ANOTAN (BTTS)
+        if probs["btts"] >= 65.0:
+            todos_mercados.append({
+                "m": "Ambos Equipos Anotan (Sí)",
+                "p": probs["btts"],
+                "r": "Bajo-Medio",
+                "razon": f"Alta frecuencia ofensiva mutua con {probs['btts']}% de probabilidad bivariada."
+            })
+
+        # 5. TIROS DE ESQUINA (CÓRNERES)
+        if corners_est >= 8.8:
+            p_corn = round(min(88.0, 68.0 + (corners_est - 8.8) * 3.5), 1)
+            if p_corn >= 68.0:
+                todos_mercados.append({
+                    "m": "Más de 7.5 Tiros de Esquina Totales",
+                    "p": p_corn,
+                    "r": "Bajo" if p_corn >= 75.0 else "Bajo-Medio",
+                    "razon": f"Proyección de {corners_est:.1f} córneres totales por volumen de ataque en bandas ({p_corn}%)."
+                })
+
+        # 6. TARJETAS DISCIPLINARIAS
+        if tarjetas_est >= 4.2:
+            p_cards = round(min(88.0, 68.0 + (tarjetas_est - 4.2) * 4.0), 1)
+            if p_cards >= 68.0:
+                ref_txt = f" (Árbitro: {referee_name})" if referee_name else ""
+                todos_mercados.append({
+                    "m": "Más de 3.5 Tarjetas Totales",
+                    "p": p_cards,
+                    "r": "Bajo" if p_cards >= 75.0 else "Bajo-Medio",
+                    "razon": f"Fricción disciplinaria{ref_txt} proyecta {tarjetas_est:.1f} tarjetas estimadas ({p_cards}%)."
+                })
+
+        # ORDENAR DE MAYOR A MENOR PROBABILIDAD REAL
         todos_mercados.sort(key=lambda x: x["p"], reverse=True)
         for cand in todos_mercados:
             cand["c"] = self.value.cuota_justa(cand["p"])
 
+        # ASIGNACIÓN DE PRONÓSTICO PRINCIPAL Y SECUNDARIO
         if not todos_mercados:
-            alertas_finales.append("🛑 RITMO INCIERTO / ALTA VARIANZA: Ningún mercado superó los filtros estrictos de seguridad. Se recomienda no apostar.")
+            alertas_finales.append("🛑 RITMO INCIERTO / ALTA VARIANZA: Ningún mercado superó los filtros estrictos de seguridad. Se recomienda abstenerse.")
             p_top = {"m": "🛑 RITMO INCIERTO (Sin Mercado Seguro)", "p": 0.0, "c": 999.0, "r": "Alto", "razon": "Ningún mercado alcanzó los filtros de seguridad estricta."}
             s_top = p_top
             ranking_final = [p_top]
@@ -204,7 +247,7 @@ class SALMEngine:
         arg = (
             f"**1. Jerarquía ELO Real:** {loc_name} ({int(analisis_raw['elo_h'])}) vs {vis_name} ({int(analisis_raw['elo_v'])}).\n\n"
             f"**2. Proyección Poisson Bivariada:** Gol Local: {probs['lambda_local']:.2f} | Gol Visita: {probs['lambda_visitante']:.2f} (Total: {probs['exp_goles']:.2f} esperados).\n\n"
-            f"**3. Contexto Táctico & Disciplina:** Córneres Est: {analisis_raw['corners_est']:.1f} | Tarjetas Est: {analisis_raw['tarjetas_est']:.1f}{ref_arg} | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
+            f"**3. Contexto Táctico & Disciplina:** Córneres Est: {corners_est:.1f} | Tarjetas Est: {tarjetas_est:.1f}{ref_arg} | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
             f"**4. Competición:** {liga_final} {'(Eliminatoria Directa - Alta Volatilidad)' if es_eliminatoria else '(Liga Regular)'}."
         )
 
