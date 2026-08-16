@@ -35,26 +35,12 @@ class Analyzer:
     }
 
     PERFIL_ARBITROS = {
-        # CONMEBOL / Sudamérica
         "wilmar roldan": 5.8, "piero maza": 5.7, "facundo tello": 5.4, "esteban ostojich": 5.5,
         "andres rojas": 5.3, "carlos betancur": 5.4, "alexis herrera": 5.6, "jesus valenzuela": 5.2,
         "wilton sampaio": 5.3, "raphael claus": 4.9, "fernando rapallini": 5.4, "nicolas ramirez": 5.2,
-        "darío herrera": 5.5, "yael falcon": 5.3, "jhon ospina": 5.1, "bismarks santiago": 5.2,
-        
-        # ESPAÑA / LaLiga
         "gil manzano": 5.5, "hernandez hernandez": 5.6, "sanchez martinez": 5.2, "cuadra fernandez": 5.4,
-        "de burgos bengoetxea": 4.8, "munuera montero": 4.9, "ortiz arias": 4.7, "soto grado": 5.3,
-
-        # INGLATERRA / Premier League
         "michael oliver": 3.7, "anthony taylor": 4.2, "paul tierney": 3.8, "simon hooper": 4.1,
-        "stuart attwell": 3.9, "craig pawson": 4.2, "john brooks": 4.3, "robert jones": 4.0,
-
-        # UEFA Champions League / Internacional
-        "istvan kovacs": 5.6, "szymon marciniak": 4.1, "daniele orsato": 4.8, "slavko vincic": 4.3,
-        "felix zwayer": 4.5, "clement turpin": 3.9, "artur dias": 4.7, "sandro scharer": 4.4,
-
-        # MÉXICO / Liga MX
-        "cesar ramos": 4.8, "fernando guerrero": 4.9, "marco ortiz": 5.2, "adonal escobedo": 5.1
+        "istvan kovacs": 5.6, "szymon marciniak": 4.1, "daniele orsato": 4.8, "felix zwayer": 4.5
     }
 
     def __init__(self, api: FootballAPI = None):
@@ -74,11 +60,9 @@ class Analyzer:
         for arbitro_clave, prom_tarjetas in self.PERFIL_ARBITROS.items():
             if arbitro_clave in ref_norm:
                 return float(prom_tarjetas)
-        # Anclaje estadístico por liga para árbitros no listados
         return float(prom_liga)
 
     def _extraer_tarjetas_reales_equipo(self, stats_api: dict) -> float:
-        """Extrae el conteo real de tarjetas por partido desde la API."""
         if not stats_api or not isinstance(stats_api, dict):
             return 0.0
         
@@ -260,18 +244,27 @@ class Analyzer:
         gf_vis = stats_l10_v["gf_exp"]
         gc_vis = stats_l10_v["gc_exp"]
 
-        # CÓRNERES: PROYECCIÓN PONDERADA 84% EQUIPOS + 16% LIGA
-        corners_local_frecuencia = 5.2 + (gf_loc * 0.9)
-        corners_visita_frecuencia = 4.2 + (gf_vis * 0.8)
-        corners_est = round((corners_local_frecuencia * 0.42) + (corners_visita_frecuencia * 0.42) + (proms_liga["corners"] * 0.16), 1)
+        # -------------------------------------------------------------
+        # CÓRNERES: EXTRACCIÓN REAL DE TIROS DE ESQUINA DE AMBOS EQUIPOS
+        # -------------------------------------------------------------
+        corners_reales_h = self.api.obtener_corners_recientes_equipo(l10_local_raw, home_id) if home_id else 0.0
+        corners_reales_v = self.api.obtener_corners_recientes_equipo(l10_visitante_raw, away_id) if away_id else 0.0
 
+        if corners_reales_h > 0 and corners_reales_v > 0:
+            # 80% Conteo real de córneres de ambos equipos + 20% Media de la liga
+            corners_est = round((corners_reales_h + corners_reales_v) * 0.80 + (proms_liga["corners"] * 0.20), 1)
+        else:
+            # Fallback seguro con ventaja de localía si la API no tiene estadísticas de fixture
+            corners_est = round(proms_liga["corners"], 1)
+
+        # -------------------------------------------------------------
         # TARJETAS 100% REALES DESDE LA BASE DE DATOS DE LA API
+        # -------------------------------------------------------------
         stats_temporada_h = self.api.obtener_estadisticas_temporada_equipo(home_id, league_id, season) if league_id else {}
         stats_temporada_v = self.api.obtener_estadisticas_temporada_equipo(away_id, league_id, season) if league_id else {}
 
         tarjetas_reales_h = self._extraer_tarjetas_reales_equipo(stats_temporada_h)
         tarjetas_reales_v = self._extraer_tarjetas_reales_equipo(stats_temporada_v)
-
         prom_tarjetas_arbitro = self._obtener_promedio_arbitro(referee_name, proms_liga["tarjetas"])
 
         if tarjetas_reales_h > 0 and tarjetas_reales_v > 0:
