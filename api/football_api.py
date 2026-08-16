@@ -209,6 +209,13 @@ class FootballAPI:
             return []
         return self.consultar("fixtures/statistics", {"fixture": fixture_id})
 
+    def obtener_estadisticas_temporada_equipo(self, team_id: int, league_id: int, season: int) -> dict:
+        """Consulta estadísticas reales de tarjetas y partidos acumulados en la temporada desde la API."""
+        if not team_id or not league_id:
+            return {}
+        res = self.consultar("teams/statistics", {"team": team_id, "league": league_id, "season": season})
+        return res if isinstance(res, dict) else (res[0] if isinstance(res, list) and len(res) > 0 else {})
+
     def obtener_alineaciones(self, fixture_id: int) -> list:
         if not fixture_id:
             return []
