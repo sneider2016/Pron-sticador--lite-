@@ -62,9 +62,7 @@ class Analyzer:
             return {
                 "partidos": 0, "datos_reales": False, "gf": 0.0, "gc": 0.0,
                 "gf_exp": 0.0, "gc_exp": 0.0, "forma_pts": 50.0, "forma_exp": 50.0,
-                "xg_avg": 1.0, "tiros_avg": 10.0, "tiros_puerta_avg": 3.8,
-                "corners_favor_avg": 4.5, "tarjetas_avg": 2.0, "over15_rate": 0.5,
-                "over25_rate": 0.5, "under25_rate": 0.5, "under35_rate": 0.5,
+                "over15_rate": 0.5, "over25_rate": 0.5, "under25_rate": 0.5, "under35_rate": 0.5,
                 "btts_rate": 0.5, "clean_sheet_rate": 0.2, "failed_to_score_rate": 0.2,
                 "racha_victorias": 0, "racha_invicto": 0, "dias_descanso": 6
             }
@@ -204,9 +202,15 @@ class Analyzer:
         gf_vis = stats_l10_v["gf_exp"]
         gc_vis = stats_l10_v["gc_exp"]
 
-        corners_est = round(proms_liga["corners"], 1)
-        base_tarjetas = proms_liga["tarjetas"]
-        tarjetas_est = round(base_tarjetas + (0.5 if referee_name else 0.0), 1)
+        # CÁLCULO PONDERADO DE CÓRNERES: EQUIPOS (84%) + LIGA (16%)
+        corners_local_frecuencia = 5.2 + (gf_loc * 0.9)
+        corners_visita_frecuencia = 4.2 + (gf_vis * 0.8)
+        corners_est = round((corners_local_frecuencia * 0.42) + (corners_visita_frecuencia * 0.42) + (proms_liga["corners"] * 0.16), 1)
+
+        # CÁLCULO PONDERADO DE TARJETAS: FRICCIÓN DE EQUIPOS + LIGA + PERFIL ÁRBITRO
+        friccion_equipos = 2.0 + ((gc_loc + gc_vis) * 0.6)
+        base_tarjetas = (friccion_equipos * 0.60) + (proms_liga["tarjetas"] * 0.40)
+        tarjetas_est = round(base_tarjetas + (0.6 if referee_name else 0.0), 1)
 
         es_eliminatoria = any(k in liga.lower() for k in ["qualif", "champions", "conference", "europa", "playoff", "cup"])
 
