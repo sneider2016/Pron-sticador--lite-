@@ -50,7 +50,19 @@ class SALMEngine:
         referee_name = fix.get("referee_name", "") if fix else ""
 
         nombre_liga_oficial = fix.get("league", {}).get("name", "") if fix else ""
+        ronda_oficial = fix.get("league", {}).get("round", "") if fix else ""
         liga_final = nombre_liga_oficial if nombre_liga_oficial and nombre_liga_oficial != "0" else liga
+
+        # DETECTOR INTELIGENTE DE FASE (Tabla / 3 Puntos vs. Eliminatoria Directa)
+        ronda_lower = ronda_oficial.lower()
+        es_fase_puntos = any(k in ronda_lower for k in ["group", "league phase", "regular season", "clausura", "apertura", "jornada", "fecha"])
+        
+        if es_fase_puntos:
+            es_eliminatoria = False
+            texto_competicion = f"{liga_final} (Fase de Tabla / 3 Puntos)"
+        else:
+            es_eliminatoria = any(k in (liga_final.lower() + " " + ronda_lower) for k in ["qualif", "playoff", "cup", "copa", "trophée", "round of 16", "quarter", "semi", "final", "knockout"])
+            texto_competicion = f"{liga_final} (⚠️ Eliminatoria Directa - Mano a Mano)" if es_eliminatoria else f"{liga_final} (Fase de Tabla / 3 Puntos)"
 
         datos_partido = {
             "home_id": h_id,
@@ -65,6 +77,7 @@ class SALMEngine:
         }
 
         analisis_raw = self.analyzer.analizar(datos_partido)
+        analisis_raw["es_eliminatoria"] = es_eliminatoria
         alertas_finales = list(analisis_raw.get("alertas", []))
 
         if not analisis_raw.get("datos_reales_ok", False):
@@ -121,13 +134,12 @@ class SALMEngine:
             descanso_h=analisis_raw["descanso_h"],
             descanso_v=analisis_raw["descanso_v"],
             home_adv=analisis_raw["home_adv"],
-            es_eliminatoria=analisis_raw["es_eliminatoria"],
+            es_eliminatoria=es_eliminatoria,
             btts_rate=analisis_raw["btts_rate"],
             under25_rate=analisis_raw["under25_rate"]
         )
 
         es_liga_cerrojo = "argentina" in liga_final.lower() or "betplay" in liga_final.lower()
-        es_eliminatoria = analisis_raw["es_eliminatoria"]
         corners_est = analisis_raw["corners_est"]
         tarjetas_est = analisis_raw["tarjetas_est"]
 
@@ -180,7 +192,7 @@ class SALMEngine:
                 "m": "Menos de 3.5 Goles Totales",
                 "p": probs["under35"],
                 "r": "Bajo",
-                "razon": f"Partido de liga regular con baja densidad goleadora esperada ({probs['exp_goles']:.2f} goles - {probs['under35']}%)."
+                "razon": f"Partido de trámite regular por puntos con baja densidad goleadora ({probs['exp_goles']:.2f} goles - {probs['under35']}%)."
             })
 
         if probs["under25"] >= 70.0 and not es_eliminatoria and es_liga_cerrojo:
@@ -201,8 +213,8 @@ class SALMEngine:
             })
 
         # 5. TIROS DE ESQUINA (CÓRNERES)
-        if corners_est >= 8.8:
-            p_corn = round(min(88.0, 68.0 + (corners_est - 8.8) * 3.5), 1)
+        if corners_est >= 8.5:
+            p_corn = round(min(88.0, 68.0 + (corners_est - 8.5) * 3.5), 1)
             if p_corn >= 68.0:
                 todos_mercados.append({
                     "m": "Más de 7.5 Tiros de Esquina Totales",
@@ -212,8 +224,8 @@ class SALMEngine:
                 })
 
         # 6. TARJETAS DISCIPLINARIAS
-        if tarjetas_est >= 4.2:
-            p_cards = round(min(88.0, 68.0 + (tarjetas_est - 4.2) * 4.0), 1)
+        if tarjetas_est >= 4.4:
+            p_cards = round(min(88.0, 68.0 + (tarjetas_est - 4.4) * 4.0), 1)
             if p_cards >= 68.0:
                 ref_txt = f" (Árbitro: {referee_name})" if referee_name else ""
                 todos_mercados.append({
@@ -223,7 +235,7 @@ class SALMEngine:
                     "razon": f"Fricción disciplinaria{ref_txt} proyecta {tarjetas_est:.1f} tarjetas estimadas ({p_cards}%)."
                 })
 
-        # ORDENAR DE MAYOR A MENOR PROBABILIDAD REAL
+        # ORDENAR ESTRICTAMENTE POR PROBABILIDAD MATEMÁTICA PURA
         todos_mercados.sort(key=lambda x: x["p"], reverse=True)
         for cand in todos_mercados:
             cand["c"] = self.value.cuota_justa(cand["p"])
@@ -248,7 +260,7 @@ class SALMEngine:
             f"**1. Jerarquía ELO Real:** {loc_name} ({int(analisis_raw['elo_h'])}) vs {vis_name} ({int(analisis_raw['elo_v'])}).\n\n"
             f"**2. Proyección Poisson Bivariada:** Gol Local: {probs['lambda_local']:.2f} | Gol Visita: {probs['lambda_visitante']:.2f} (Total: {probs['exp_goles']:.2f} esperados).\n\n"
             f"**3. Contexto Táctico & Disciplina:** Córneres Est: {corners_est:.1f} | Tarjetas Est: {tarjetas_est:.1f}{ref_arg} | Descanso: {analisis_raw['descanso_h']}d vs {analisis_raw['descanso_v']}d.\n\n"
-            f"**4. Competición:** {liga_final} {'(Eliminatoria Directa - Alta Volatilidad)' if es_eliminatoria else '(Liga Regular)'}."
+            f"**4. Competición:** {texto_competicion}."
         )
 
         return Match(
@@ -270,4 +282,4 @@ class SALMEngine:
             risk=p_top["r"],
             explanation=arg,
             alerts=alertas_finales
-        )
+                    )
