@@ -244,22 +244,16 @@ class Analyzer:
         gf_vis = stats_l10_v["gf_exp"]
         gc_vis = stats_l10_v["gc_exp"]
 
-        # -------------------------------------------------------------
-        # CÓRNERES: EXTRACCIÓN REAL DE TIROS DE ESQUINA DE AMBOS EQUIPOS
-        # -------------------------------------------------------------
+        # CÓRNERES REALES
         corners_reales_h = self.api.obtener_corners_recientes_equipo(l10_local_raw, home_id) if home_id else 0.0
         corners_reales_v = self.api.obtener_corners_recientes_equipo(l10_visitante_raw, away_id) if away_id else 0.0
 
         if corners_reales_h > 0 and corners_reales_v > 0:
-            # 80% Conteo real de córneres de ambos equipos + 20% Media de la liga
             corners_est = round((corners_reales_h + corners_reales_v) * 0.80 + (proms_liga["corners"] * 0.20), 1)
         else:
-            # Fallback seguro con ventaja de localía si la API no tiene estadísticas de fixture
             corners_est = round(proms_liga["corners"], 1)
 
-        # -------------------------------------------------------------
-        # TARJETAS 100% REALES DESDE LA BASE DE DATOS DE LA API
-        # -------------------------------------------------------------
+        # TARJETAS REALES DESDE LA API
         stats_temporada_h = self.api.obtener_estadisticas_temporada_equipo(home_id, league_id, season) if league_id else {}
         stats_temporada_v = self.api.obtener_estadisticas_temporada_equipo(away_id, league_id, season) if league_id else {}
 
@@ -282,6 +276,10 @@ class Analyzer:
             "defensa_visitante": round(gc_vis, 2),
             "forma_local": stats_l10_h["forma_exp"],
             "forma_visitante": stats_l10_v["forma_exp"],
+            "clean_sheet_h": stats_l10_h["clean_sheet_rate"],
+            "clean_sheet_v": stats_l10_v["clean_sheet_rate"],
+            "failed_to_score_h": stats_l10_h["failed_to_score_rate"],
+            "failed_to_score_v": stats_l10_v["failed_to_score_rate"],
             "elo_h": elo_h,
             "elo_v": elo_v,
             "descanso_h": stats_l10_h["dias_descanso"],
