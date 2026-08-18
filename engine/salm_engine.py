@@ -53,16 +53,26 @@ class SALMEngine:
         ronda_oficial = fix.get("league", {}).get("round", "") if fix else ""
         liga_final = nombre_liga_oficial if nombre_liga_oficial and nombre_liga_oficial != "0" else liga
 
-        # DETECTOR INTELIGENTE DE FASE (Tabla / 3 Puntos vs. Eliminatoria Directa)
-        ronda_lower = ronda_oficial.lower()
-        es_fase_puntos = any(k in ronda_lower for k in ["group", "league phase", "regular season", "clausura", "apertura", "jornada", "fecha"])
-        
-        if es_fase_puntos:
+        # DETECTOR INTELIGENTE DE FASE BLINDADO (ÚNICA MEJORA APLICADA)
+        ronda_lower = ronda_oficial.lower().strip()
+        liga_lower = liga_final.lower().strip()
+        mes_partido = int(fecha.split("-")[1]) if fecha and "-" in fecha else datetime.now().month
+
+        es_torneo_uefa = any(k in liga_lower for k in ["champions", "europa", "conference"])
+        es_previa_verano = es_torneo_uefa and (mes_partido in [6, 7, 8])  # En junio, julio y agosto en Europa siempre son fases previas de ida y vuelta
+
+        palabras_ko = [
+            "qualif", "play-off", "playoff", "play off", "cup", "copa", "trophée", "trophy",
+            "round of 16", "round of 32", "quarter", "semi", "final", "knockout", "supercopa", "super cup"
+        ]
+        es_ronda_ko = any(k in ronda_lower for k in palabras_ko) or any(k in liga_lower for k in ["cup", "copa", "trophée", "supercopa"])
+
+        if es_previa_verano or es_ronda_ko:
+            es_eliminatoria = True
+            texto_competicion = f"{liga_final} (⚠️ Eliminatoria Directa - Mano a Mano)"
+        else:
             es_eliminatoria = False
             texto_competicion = f"{liga_final} (Fase de Tabla / 3 Puntos)"
-        else:
-            es_eliminatoria = any(k in (liga_final.lower() + " " + ronda_lower) for k in ["qualif", "playoff", "cup", "copa", "trophée", "round of 16", "quarter", "semi", "final", "knockout"])
-            texto_competicion = f"{liga_final} (⚠️ Eliminatoria Directa - Mano a Mano)" if es_eliminatoria else f"{liga_final} (Fase de Tabla / 3 Puntos)"
 
         datos_partido = {
             "home_id": h_id,
@@ -282,4 +292,4 @@ class SALMEngine:
             risk=p_top["r"],
             explanation=arg,
             alerts=alertas_finales
-                    )
+            )
