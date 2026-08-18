@@ -25,7 +25,18 @@ class ProbabilityCalculator:
 
         return (max(0.20, min(4.80, lambda_h_post)), max(0.20, min(4.80, lambda_v_post)))
 
-    def _calcular_rho_dinamico(self, l_h: float, l_v: float, forma_local: float = 50.0, forma_visitante: float = 50.0, **kwargs) -> float:
+    def _calcular_rho_dinamico(
+        self,
+        l_h: float,
+        l_v: float,
+        forma_local: float = 50.0,
+        forma_visitante: float = 50.0,
+        clean_sheet_h: float = 0.20,
+        clean_sheet_v: float = 0.20,
+        failed_to_score_h: float = 0.20,
+        failed_to_score_v: float = 0.20,
+        **kwargs
+    ) -> float:
         mu_total = l_h + l_v
         if mu_total <= 0:
             return -0.05
@@ -36,8 +47,11 @@ class ProbabilityCalculator:
         factor_simetria = max(0.0, 1.0 - (disparidad ** 2))
         forma_div = max(0.0, 1.0 - (abs(forma_local - forma_visitante) / 100.0))
 
-        rho_teorico = - (p_00 / geom_mean) * factor_simetria * forma_div
-        return max(-0.14, min(-0.005, round(rho_teorico, 4)))
+        # Factor dinámico de ceros: ajusta la masa de 0-0 y 1-0 según vallas invictas reales
+        factor_cerrojo = max(0.5, min(2.2, (clean_sheet_h + clean_sheet_v + failed_to_score_h + failed_to_score_v) * 1.5))
+
+        rho_teorico = - (p_00 / geom_mean) * factor_simetria * forma_div * factor_cerrojo
+        return max(-0.16, min(-0.005, round(rho_teorico, 4)))
 
     def _ajuste_dixon_coles(self, i: int, j: int, l_h: float, l_v: float, rho: float) -> float:
         tau = 1.0
@@ -165,6 +179,10 @@ class ProbabilityCalculator:
         es_eliminatoria: bool = False,
         btts_rate: float = 0.50,
         under25_rate: float = 0.50,
+        clean_sheet_h: float = 0.20,
+        clean_sheet_v: float = 0.20,
+        failed_to_score_h: float = 0.20,
+        failed_to_score_v: float = 0.20,
         **kwargs
     ) -> dict:
 
@@ -180,19 +198,25 @@ class ProbabilityCalculator:
         fatiga_h = 0.92 if descanso_h < 3 else 1.0
         fatiga_v = 0.92 if descanso_v < 3 else 1.0
 
-        l_h_raw = base_lambda_local * factor_elo_h * fatiga_h
-        l_v_raw = base_lambda_visitante * factor_elo_v * fatiga_v
+        # AJUSTE UNIVERSAL DE RESISTENCIA / PERMEABILIDAD DEFENSIVA
+        # Si ambos equipos tienen defensas permeables (reciben gol casi siempre), los goles suben.
+        # Si ambos tienen alta tasa de vallas invictas (cerrojo), los goles se controlan automáticamente.
+        resistencia_defensiva = max(0.82, min(1.18, 1.0 - ((clean_sheet_h + clean_sheet_v - 0.40) * 0.40) + ((failed_to_score_h + failed_to_score_v - 0.40) * -0.20)))
 
-        if es_eliminatoria:
-            l_h_raw *= 1.08
-            l_v_raw *= 1.08
+        l_h_raw = base_lambda_local * factor_elo_h * fatiga_h * resistencia_defensiva
+        l_v_raw = base_lambda_visitante * factor_elo_v * fatiga_v * resistencia_defensiva
 
         # 3. Recalibración Bayesiana de Lambdas
         lambda_local, lambda_visitante = self._recalibrar_lambdas_bayesiano(l_h_raw, l_v_raw)
 
-        # 4. Covarianza lambda_3 y Rho Dinámico
+        # 4. Covarianza lambda_3 y Rho Dinámico con Vallas Invictas
         lambda_3 = min(0.20, lambda_local * lambda_visitante * 0.08)
-        rho_dinamico = self._calcular_rho_dinamico(lambda_local, lambda_visitante, forma_local, forma_visitante)
+        rho_dinamico = self._calcular_rho_dinamico(
+            lambda_local, lambda_visitante,
+            forma_local=forma_local, forma_visitante=forma_visitante,
+            clean_sheet_h=clean_sheet_h, clean_sheet_v=clean_sheet_v,
+            failed_to_score_h=failed_to_score_h, failed_to_score_v=failed_to_score_v
+        )
 
         # A. CÁLCULO ANALÍTICO BIVARIADO POISSON + DIXON-COLES
         matriz_8x8 = [[0.0] * 8 for _ in range(8)]
@@ -302,4 +326,4 @@ class ProbabilityCalculator:
             "over35": round(p_over35 * 100.0, 1),
             "btts": round(p_btts * 100.0, 1),
             "confianza": confianza_final
-        }
+    }
