@@ -53,19 +53,19 @@ class SALMEngine:
         ronda_oficial = fix.get("league", {}).get("round", "") if fix else ""
         liga_final = nombre_liga_oficial if nombre_liga_oficial and nombre_liga_oficial != "0" else liga
 
-        # DETECTOR INTELIGENTE DE FASE BLINDADO (ÚNICA MEJORA APLICADA)
+        # DETECTOR INTELIGENTE DE FASE (Tabla / 3 Puntos vs. Eliminatoria Directa)
         ronda_lower = ronda_oficial.lower().strip()
         liga_lower = liga_final.lower().strip()
         mes_partido = int(fecha.split("-")[1]) if fecha and "-" in fecha else datetime.now().month
 
         es_torneo_uefa = any(k in liga_lower for k in ["champions", "europa", "conference"])
-        es_previa_verano = es_torneo_uefa and (mes_partido in [6, 7, 8])  # En junio, julio y agosto en Europa siempre son fases previas de ida y vuelta
+        es_previa_verano = es_torneo_uefa and (mes_partido in [6, 7, 8])
 
         palabras_ko = [
             "qualif", "play-off", "playoff", "play off", "cup", "copa", "trophée", "trophy",
             "round of 16", "round of 32", "quarter", "semi", "final", "knockout", "supercopa", "super cup"
         ]
-        es_ronda_ko = any(k in ronda_lower for k in palabras_ko) or any(k in liga_lower for k in ["cup", "copa", "trophée", "supercopa"])
+        es_ronda_ko = any(k in ronda_lower for k in palabras_ko) or any(k in liga_lower for k in ["cup", "copa", "trophée", "supercopa", "sudamericana", "libertadores"])
 
         if es_previa_verano or es_ronda_ko:
             es_eliminatoria = True
@@ -132,6 +132,7 @@ class SALMEngine:
         else:
             alertas_finales.append("⚠️ Alineaciones oficiales aún no confirmadas. Análisis con alineación proyectada.")
 
+        # CÁLCULO DE PROBABILIDADES CON VALLAS INVICTAS Y PERMEABILIDAD DEFENSIVA
         probs = self.probability.calcular(
             ataque_local=analisis_raw["ataque_local"],
             defensa_local=analisis_raw["defensa_local"],
@@ -146,7 +147,11 @@ class SALMEngine:
             home_adv=analisis_raw["home_adv"],
             es_eliminatoria=es_eliminatoria,
             btts_rate=analisis_raw["btts_rate"],
-            under25_rate=analisis_raw["under25_rate"]
+            under25_rate=analisis_raw["under25_rate"],
+            clean_sheet_h=analisis_raw.get("clean_sheet_h", 0.20),
+            clean_sheet_v=analisis_raw.get("clean_sheet_v", 0.20),
+            failed_to_score_h=analisis_raw.get("failed_to_score_h", 0.20),
+            failed_to_score_v=analisis_raw.get("failed_to_score_v", 0.20)
         )
 
         es_liga_cerrojo = "argentina" in liga_final.lower() or "betplay" in liga_final.lower()
@@ -187,7 +192,7 @@ class SALMEngine:
                 "razon": f"Métricas superiores del visitante ({probs['dnb_visitante']}%) garantizando reembolso ante empate."
             })
 
-        # 3. GOLES (OVER / UNDER)
+        # 3. GOLES (OVER / UNDER) — 100% ORGÁNICO SEGÚN LA MATEMÁTICA Y LOS EQUIPOS
         umbral_o15 = 78.0 if es_liga_cerrojo else 70.0
         if probs["over15"] >= umbral_o15:
             todos_mercados.append({
@@ -197,15 +202,15 @@ class SALMEngine:
                 "razon": f"Expectativa de {probs['exp_goles']:.2f} goles con alta probabilidad de marcadores abiertos ({probs['over15']}%)."
             })
 
-        if probs["under35"] >= 72.0 and not es_eliminatoria:
+        if probs["under35"] >= 72.0:
             todos_mercados.append({
                 "m": "Menos de 3.5 Goles Totales",
                 "p": probs["under35"],
                 "r": "Bajo",
-                "razon": f"Partido de trámite regular por puntos con baja densidad goleadora ({probs['exp_goles']:.2f} goles - {probs['under35']}%)."
+                "razon": f"Baja densidad goleadora esperada ({probs['exp_goles']:.2f} goles - {probs['under35']}% prob. real)."
             })
 
-        if probs["under25"] >= 70.0 and not es_eliminatoria and es_liga_cerrojo:
+        if probs["under25"] >= 70.0:
             todos_mercados.append({
                 "m": "Menos de 2.5 Goles Totales (Under 2.5)",
                 "p": probs["under25"],
@@ -213,7 +218,7 @@ class SALMEngine:
                 "razon": f"Trámite de alta fricción táctica y baja expectativa ({probs['exp_goles']:.2f} goles - {probs['under25']}%)."
             })
 
-        # 4. AMBOS EQUIPOS ANOTAN (BTTS)
+        # 4. AMBOS EQUIPOS ANOTAN (BTTS SÍ / NO)
         if probs["btts"] >= 65.0:
             todos_mercados.append({
                 "m": "Ambos Equipos Anotan (Sí)",
@@ -222,7 +227,16 @@ class SALMEngine:
                 "razon": f"Alta frecuencia ofensiva mutua con {probs['btts']}% de probabilidad bivariada."
             })
 
-        # 5. TIROS DE ESQUINA (CÓRNERES)
+        p_btts_no = round(100.0 - probs["btts"], 1)
+        if p_btts_no >= 65.0:
+            todos_mercados.append({
+                "m": "Ambos Equipos Anotan (No)",
+                "p": p_btts_no,
+                "r": "Bajo-Medio",
+                "razon": f"Alta solidez defensiva y probabilidad de valla invicta del {p_btts_no}%."
+            })
+
+        # 5. TIROS DE ESQUINA (CÓRNERES REALES API)
         if corners_est >= 8.5:
             p_corn = round(min(88.0, 68.0 + (corners_est - 8.5) * 3.5), 1)
             if p_corn >= 68.0:
@@ -233,7 +247,7 @@ class SALMEngine:
                     "razon": f"Proyección de {corners_est:.1f} córneres totales por volumen de ataque en bandas ({p_corn}%)."
                 })
 
-        # 6. TARJETAS DISCIPLINARIAS
+        # 6. TARJETAS DISCIPLINARIAS (REALES API + ÁRBITRO)
         if tarjetas_est >= 4.4:
             p_cards = round(min(88.0, 68.0 + (tarjetas_est - 4.4) * 4.0), 1)
             if p_cards >= 68.0:
