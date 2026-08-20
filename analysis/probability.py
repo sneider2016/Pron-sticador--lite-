@@ -198,9 +198,7 @@ class ProbabilityCalculator:
         fatiga_h = 0.92 if descanso_h < 3 else 1.0
         fatiga_v = 0.92 if descanso_v < 3 else 1.0
 
-        # AJUSTE UNIVERSAL DE RESISTENCIA / PERMEABILIDAD DEFENSIVA
-        # Si ambos equipos tienen defensas permeables (reciben gol casi siempre), los goles suben.
-        # Si ambos tienen alta tasa de vallas invictas (cerrojo), los goles se controlan automáticamente.
+        # Permeabilidad y Resistencia Defensiva Real (ADN DE LOS EQUIPOS)
         resistencia_defensiva = max(0.82, min(1.18, 1.0 - ((clean_sheet_h + clean_sheet_v - 0.40) * 0.40) + ((failed_to_score_h + failed_to_score_v - 0.40) * -0.20)))
 
         l_h_raw = base_lambda_local * factor_elo_h * fatiga_h * resistencia_defensiva
@@ -209,7 +207,7 @@ class ProbabilityCalculator:
         # 3. Recalibración Bayesiana de Lambdas
         lambda_local, lambda_visitante = self._recalibrar_lambdas_bayesiano(l_h_raw, l_v_raw)
 
-        # 4. Covarianza lambda_3 y Rho Dinámico con Vallas Invictas
+        # 4. Covarianza lambda_3 y Rho Dinámico
         lambda_3 = min(0.20, lambda_local * lambda_visitante * 0.08)
         rho_dinamico = self._calcular_rho_dinamico(
             lambda_local, lambda_visitante,
@@ -273,7 +271,7 @@ class ProbabilityCalculator:
         p_empate_raw = (p_empate_a * w_analitico) + (mc["p_d"] * w_mc)
         p_visitante_raw = (p_visitante_a * w_analitico) + (mc["p_v"] * w_mc)
 
-        # D. CALIBRACIÓN DE PLATT / TEMPERATURA
+        # D. CALIBRACIÓN DE PLATT / TEMPERATURA 100% ORGÁNICA (SIN CASTIGOS ARTIFICIALES)
         p_local = self._calibracion_temperatura_platt(p_local_raw)
         p_empate = self._calibracion_temperatura_platt(p_empate_raw)
         p_visitante = self._calibracion_temperatura_platt(p_visitante_raw)
@@ -290,10 +288,6 @@ class ProbabilityCalculator:
         p_under35 = self._calibracion_temperatura_platt((p_u35_a * w_analitico) + (mc["u35"] * w_mc))
         p_over35 = 1.0 - p_under35
         p_btts = self._calibracion_temperatura_platt((p_btts_a * w_analitico) + (mc["btts"] * w_mc))
-
-        if es_eliminatoria:
-            p_under35 = max(0.50, p_under35 * 0.88)
-            p_over35 = 1.0 - p_under35
 
         p_1x = min(0.94, p_local + p_empate)
         p_x2 = min(0.94, p_visitante + p_empate)
@@ -326,4 +320,4 @@ class ProbabilityCalculator:
             "over35": round(p_over35 * 100.0, 1),
             "btts": round(p_btts * 100.0, 1),
             "confianza": confianza_final
-    }
+        }
